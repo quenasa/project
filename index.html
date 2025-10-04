@@ -1,208 +1,194 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>¿Qué NASA?</title>
-    <link rel="stylesheet" href="style.css" />
 
-    <!-- Leaflet CSS -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>¿Qué NASA?</title>
+  <link rel="stylesheet" href="style.css" />
 
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <!-- Leaflet.heat plugin -->
   <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 
-    <!-- Heatmap.js -->
-    <script src="https://cdn.jsdelivr.net/npm/heatmap.js@2.0.5/heatmap.min.js"></script>
+  <!-- Heatmap.js -->
+  <script src="https://cdn.jsdelivr.net/npm/heatmap.js@2.0.5/heatmap.min.js"></script>
 
-    <!-- Leaflet Heatmap Plugin -->
-    <script src="https://cdn.jsdelivr.net/npm/leaflet-heatmap/leaflet-heatmap.js"></script>
-  </head>
+  <!-- Leaflet Heatmap Plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-heatmap/leaflet-heatmap.js"></script>
+</head>
 
-  <body>
-    <header class="hero">
-      <div class="hero-content">
-        <h1>Data Pathways to Healthy Cities</h1>
-        <p>
-          Explorando cómo los datos transforman la vida urbana y el bienestar
-          humano.
-        </p>
-        <a href="#mapa" class="btn">Explorar el mapa</a>
+<body>
+  <header class="hero">
+    <div class="hero-content">
+      <h1>Data Pathways to Healthy Cities</h1>
+      <p>
+        Explorando cómo los datos transforman la vida urbana y el bienestar
+        humano.
+      </p>
+      <a href="#mapa" class="btn">Explorar el mapa</a>
+    </div>
+  </header>
+
+  <main>
+    <section id="mapa" class="map-section">
+      <h2>Mapa de calor: Calidad del aire</h2>
+      <p>Visualización interactiva. Selecciona el conjunto de datos a visualizar:</p>
+      <div class="controls"
+        style="max-width:900px;margin:0 auto 1rem;display:flex;gap:1rem;align-items:center;justify-content:center;">
+        <select id="datasetSelect" aria-label="Selecciona conjunto de datos">
+          <option value="our_index.json">Our index (default)</option>
+          <option value="air_quality.json">Air Quality</option>
+          <option value="poverty.json">Poverty</option>
+          <option value="water_quality.json">Water Quality</option>
+        </select>
       </div>
-    </header>
+      <div id="heatmapContainer"></div>
+    </section>
+  </main>
 
-    <main>
-      <section id="mapa" class="map-section">
-        <h2>Mapa de calor: Calidad del aire</h2>
-        <p>Visualización interactiva. Selecciona el conjunto de datos a visualizar:</p>
-        <div class="controls" style="max-width:900px;margin:0 auto 1rem;display:flex;gap:1rem;align-items:center;justify-content:center;">
-          <select id="datasetSelect" aria-label="Selecciona conjunto de datos">
-            <option value="our_index.json">Our index (default)</option>
-            <option value="air_quality.json">Air Quality</option>
-            <option value="poverty.json">Poverty</option>
-            <option value="water_quality.json">Water Quality</option>
+
+
+  <section id="video-section" class="video-section">
+    <div class="video-container">
+      <video id="cityVideo" autoplay muted loop playsinline>
+        <source src="assets/video/videoPlaneta.mp4" type="video/mp4" />
+        Tu navegador no soporta la etiqueta de video.
+      </video>
+      <div class="video-overlay-text">
+        <h2>Explora la ciudad en acción</h2>
+        <p>Visualización de datos y vida urbana en tiempo real.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" class="faq-section">
+    <h2>Preguntas Frecuentes</h2>
+    <div class="faq-container">
+      <div class="faq-item">
+        <button class="faq-question">
+          ¿Cómo se utilizan los datos satelitales de la NASA en este proyecto?
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-answer">
+          <p>
+            Los datos satelitales permiten analizar indicadores ambientales como
+            la calidad del aire, temperatura y cobertura vegetal. Estos datos se
+            integran en mapas interactivos que ayudan a planificadores urbanos a
+            tomar decisiones sostenibles.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question">
+          ¿De dónde provienen los datos visualizados en el mapa?
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-answer">
+          <p>
+            Los datos del mapa son simulaciones inspiradas en observaciones reales
+            de satélites de la NASA como MODIS y VIIRS, utilizadas para monitorear
+            la calidad del aire y la temperatura de superficie.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question">
+          ¿Qué beneficios aporta esta visualización a las ciudades?
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-answer">
+          <p>
+            Facilita la detección de áreas vulnerables a contaminación o calor
+            extremo, ayudando a diseñar estrategias de infraestructura verde,
+            movilidad sostenible y mejora del bienestar ciudadano.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="report-section">
+    <h2>Reportar una incidencia</h2>
+
+    <form class="report-form">
+      <!-- Fila 1: Tipo de incidencia + Urgencia -->
+      <div class="form-row">
+        <div class="form-group">
+          <label for="tipo">Tipo de incidencia</label>
+          <select id="tipo" name="tipo">
+            <option value="" disabled selected>Selecciona una opción</option>
+            <option value="social">Problema social</option>
+            <option value="economica">Económica</option>
+            <option value="ambiental">Contaminación / Ambiental</option>
+            <option value="infraestructura">Infraestructura</option>
           </select>
         </div>
-        <div id="heatmapContainer"></div>
-      </section>
-    </main>
 
-    
-
-    <section id="video-section" class="video-section">
-      <div class="video-container">
-        <video id="cityVideo" autoplay muted loop playsinline>
-          <source src="assets/video/videoPlaneta.mp4" type="video/mp4" />
-          Tu navegador no soporta la etiqueta de video.
-        </video>
-        <div class="video-overlay-text">
-          <h2>Explora la ciudad en acción</h2>
-          <p>Visualización de datos y vida urbana en tiempo real.</p>
+        <div class="form-group">
+          <label for="urgencia">Nivel de urgencia</label>
+          <select id="urgencia" name="urgencia">
+            <option value="" disabled selected>Selecciona una opción</option>
+            <option value="alta">Alta</option>
+            <option value="media">Media</option>
+            <option value="baja">Baja</option>
+          </select>
         </div>
       </div>
-    </section>
-    
-    <section id="faq" class="faq-section">
-      <h2>Preguntas Frecuentes</h2>
-      <div class="faq-container">
-        <div class="faq-item">
-          <button class="faq-question">
-            ¿Cómo se utilizan los datos satelitales de la NASA en este proyecto?
-            <span class="faq-icon">+</span>
-          </button>
-          <div class="faq-answer">
-            <p>
-              Los datos satelitales permiten analizar indicadores ambientales como
-              la calidad del aire, temperatura y cobertura vegetal. Estos datos se
-              integran en mapas interactivos que ayudan a planificadores urbanos a
-              tomar decisiones sostenibles.
-            </p>
-          </div>
+
+      <!-- Fila 2: País + Ciudad -->
+      <div class="form-row">
+        <div class="form-group">
+          <label for="pais">País</label>
+          <input type="text" id="pais" name="pais" placeholder="Ej. España" />
         </div>
-    
-        <div class="faq-item">
-          <button class="faq-question">
-            ¿De dónde provienen los datos visualizados en el mapa?
-            <span class="faq-icon">+</span>
-          </button>
-          <div class="faq-answer">
-            <p>
-              Los datos del mapa son simulaciones inspiradas en observaciones reales
-              de satélites de la NASA como MODIS y VIIRS, utilizadas para monitorear
-              la calidad del aire y la temperatura de superficie.
-            </p>
-          </div>
-        </div>
-    
-        <div class="faq-item">
-          <button class="faq-question">
-            ¿Qué beneficios aporta esta visualización a las ciudades?
-            <span class="faq-icon">+</span>
-          </button>
-          <div class="faq-answer">
-            <p>
-              Facilita la detección de áreas vulnerables a contaminación o calor
-              extremo, ayudando a diseñar estrategias de infraestructura verde,
-              movilidad sostenible y mejora del bienestar ciudadano.
-            </p>
-          </div>
+
+        <div class="form-group">
+          <label for="ciudad">Ciudad</label>
+          <input type="text" id="ciudad" name="ciudad" placeholder="Ej. Madrid" />
         </div>
       </div>
-    </section>
 
-    <section class="report-section">
-      <h2>Reportar una incidencia</h2>
-    
-      <form class="report-form">
-        <!-- Fila 1: Tipo de incidencia + Urgencia -->
-        <div class="form-row">
-          <div class="form-group">
-            <label for="tipo">Tipo de incidencia</label>
-            <select id="tipo" name="tipo">
-              <option value="" disabled selected>Selecciona una opción</option>
-              <option value="social">Problema social</option>
-              <option value="economica">Económica</option>
-              <option value="ambiental">Contaminación / Ambiental</option>
-              <option value="infraestructura">Infraestructura</option>
-            </select>
-          </div>
-    
-          <div class="form-group">
-            <label for="urgencia">Nivel de urgencia</label>
-            <select id="urgencia" name="urgencia">
-              <option value="" disabled selected>Selecciona una opción</option>
-              <option value="alta">Alta</option>
-              <option value="media">Media</option>
-              <option value="baja">Baja</option>
-            </select>
-          </div>
-        </div>
-    
-        <!-- Fila 2: País + Ciudad -->
-        <div class="form-row">
-          <div class="form-group">
-            <label for="pais">País</label>
-            <input type="text" id="pais" name="pais" placeholder="Ej. España" />
-          </div>
-    
-          <div class="form-group">
-            <label for="ciudad">Ciudad</label>
-            <input type="text" id="ciudad" name="ciudad" placeholder="Ej. Madrid" />
-          </div>
-        </div>
-    
-        <!-- Fila 3: Descripción -->
-        <div class="form-group full-width">
-          <label for="descripcion">Descripción de la incidencia</label>
-          <textarea
-            id="descripcion"
-            name="descripcion"
-            rows="4"
-            placeholder="Describe brevemente el problema..."
-          ></textarea>
-        </div>
-    
-        <!-- Fila 4: Nombre + Correo -->
-        <div class="form-row">
-          <div class="form-group">
-            <label for="nombre">Nombre y apellidos</label>
-            <input
-              type="text"
-              id="nombre"
-              name="nombre"
-              placeholder="Ej. Laura Fernández"
-            />
-          </div>
-    
-          <div class="form-group">
-            <label for="correo">Correo de contacto</label>
-            <input
-              type="email"
-              id="correo"
-              name="correo"
-              placeholder="tuemail@ejemplo.com"
-            />
-          </div>
-        </div>
-    
-        <button type="submit">Enviar reporte</button>
-      </form>
-    </section>
-    
-    
-    
-    
+      <!-- Fila 3: Descripción -->
+      <div class="form-group full-width">
+        <label for="descripcion">Descripción de la incidencia</label>
+        <textarea id="descripcion" name="descripcion" rows="4"
+          placeholder="Describe brevemente el problema..."></textarea>
+      </div>
 
-    <footer>
-      <p>Proyecto educativo inspirado en datos de observación de la Tierra (NASA).</p>
-    </footer>
+      <!-- Fila 4: Nombre + Correo -->
+      <div class="form-row">
+        <div class="form-group">
+          <label for="nombre">Nombre y apellidos</label>
+          <input type="text" id="nombre" name="nombre" placeholder="Ej. Laura Fernández" />
+        </div>
 
-    <script src="script.js" defer></script>
-  </body>
+        <div class="form-group">
+          <label for="correo">Correo de contacto</label>
+          <input type="email" id="correo" name="correo" placeholder="tuemail@ejemplo.com" />
+        </div>
+      </div>
+
+      <button type="submit">Enviar reporte</button>
+    </form>
+  </section>
+
+
+
+
+
+  <footer>
+    <p>Proyecto educativo inspirado en datos de observación de la Tierra (NASA).</p>
+  </footer>
+
+  <script src="script.js" defer></script>
+</body>
+
 </html>

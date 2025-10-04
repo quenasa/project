@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Preload datasets so switching is instant. Store normalized arrays under datasets[file]
-  const datasetFiles = ['our_index.json','air_quality.json','poverty.json','water_quality.json'];
+  const datasetFiles = ['our_index.json', 'air_quality.json', 'poverty.json', 'water_quality.json'];
   const datasets = {}; // filename -> normalized array
 
   async function fetchAndNormalize(file) {
@@ -149,20 +149,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     console.log('Rendering dataset:', selVal, 'points:', norm.length);
-  // compute min/max of metric for this dataset
-  const metrics = norm.map(d => Number(d.metric || 0));
-  const minMetric = Math.min(...metrics);
-  const maxMetric = Math.max(...metrics);
-  // dynamic scaling: map min->0 and max->cap (or 100) to full intensity range
-  const cap = (selVal === 'air_quality.json') ? 200 : 100;
-  metricCap = cap;
-  const scaleMin = minMetric;
-  const scaleMax = Math.max(maxMetric, 1);
+    // compute min/max of metric for this dataset
+    const metrics = norm.map(d => Number(d.metric || 0));
+    const minMetric = Math.min(...metrics);
+    const maxMetric = Math.max(...metrics);
+    // dynamic scaling: map min->0 and max->cap (or 100) to full intensity range
+    const cap = (selVal === 'air_quality.json') ? 200 : 100;
+    metricCap = cap;
+    const scaleMin = minMetric;
+    const scaleMax = Math.max(maxMetric, 1);
 
-  // apply dynamic normalization to create a metric field normalized to 0..cap
-  const dyn = norm.map(d => ({ lat: d.lat, lng: d.lng, metric: ((Number(d.metric || 0) - scaleMin) / (scaleMax - scaleMin)) * cap }));
-  currentNormalized = dyn;
-  const newHeat = createHeatForZoom(currentNormalized, map.getZoom());
+    // apply dynamic normalization to create a metric field normalized to 0..cap
+    const dyn = norm.map(d => ({ lat: d.lat, lng: d.lng, metric: ((Number(d.metric || 0) - scaleMin) / (scaleMax - scaleMin)) * cap }));
+    currentNormalized = dyn;
+    const newHeat = createHeatForZoom(currentNormalized, map.getZoom());
     if (heatLayer) {
       try { map.removeLayer(heatLayer); } catch (e) { /* ignore */ }
     }
