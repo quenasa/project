@@ -15,6 +15,9 @@
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+  <!-- Leaflet.heat plugin -->
+  <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+
     <!-- Heatmap.js -->
     <script src="https://cdn.jsdelivr.net/npm/heatmap.js@2.0.5/heatmap.min.js"></script>
 
@@ -37,7 +40,15 @@
     <main>
       <section id="mapa" class="map-section">
         <h2>Mapa de calor: Calidad del aire</h2>
-        <p>Visualización basada en datos simulados (ejemplo de ciudades españolas).</p>
+        <p>Visualización interactiva. Selecciona el conjunto de datos a visualizar:</p>
+        <div class="controls" style="max-width:900px;margin:0 auto 1rem;display:flex;gap:1rem;align-items:center;justify-content:center;">
+          <select id="datasetSelect" aria-label="Selecciona conjunto de datos">
+            <option value="our_index.json">Our index (default)</option>
+            <option value="air_quality.json">Air Quality</option>
+            <option value="poverty.json">Poverty</option>
+            <option value="water_quality.json">Water Quality</option>
+          </select>
+        </div>
         <div id="heatmapContainer"></div>
       </section>
     </main>
