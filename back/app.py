@@ -297,11 +297,11 @@ if __name__ == '__main__':
     
     print(f"""
     ╔═══════════════════════════════════════════════════════════╗
-    ║  Climate and Social Justice Map API                      ║
+    ║  Climate and Social Justice Map API                       ║
     ║  Backend Server Starting...                               ║
     ║                                                           ║
-    ║  Running on: http://localhost:{port}                       ║
-    ║  Debug mode: {debug}                                       ║
+    ║  Running on: http://localhost:{port}                      ║
+    ║  Debug mode: {debug}                                      ║
     ╚═══════════════════════════════════════════════════════════╝
     """)
     
