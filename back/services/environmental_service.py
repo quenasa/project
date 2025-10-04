@@ -7,6 +7,7 @@ import os
 import tempfile
 import requests
 import cdsapi
+import zipfile
 from flask import current_app
 
 try:
@@ -150,7 +151,7 @@ class EnvironmentalService:
             air_quality = self.get_air_quality(lat, lon)
             data["air_quality"] = air_quality
             
-            # 2. Temperature data
+            # 2. Temperature and precipitation data
             temperature = self.get_temperature(lat, lon)
             data["temperature"] = temperature
             
@@ -161,10 +162,13 @@ class EnvironmentalService:
             # 4. Water quality indicators (placeholder)
             data["water_quality"] = self.get_water_quality(lat, lon)
             
-            # 5. CO2 emissions estimate
-            data["co2_emissions"] = self.estimate_co2_emissions(lat, lon)
+            # 5. CO2 emissions
+            data["co2_emissions"] = self.estimate_co2_emissions(lat, lon, country)
             
-            # 6. Climate risks
+            # 6. Tree cover loss
+            data["tree_cover"] = self.get_tree_cover_loss(lat, lon, country)
+            
+            # 7. Climate risks
             data["climate_risks"] = self.get_climate_risks(lat, lon)
             
         except Exception as e:
@@ -325,7 +329,7 @@ class EnvironmentalService:
                         'reanalysis-era5-single-levels',
                         {
                             'product_type': 'reanalysis',
-                            'variable': ['2m_temperature'],
+                            'variable': ['2m_temperature', 'total_precipitation'],
                             'year': year,
                             'month': month,
                             'day': day,
@@ -353,11 +357,59 @@ class EnvironmentalService:
             # Check if we found valid data
             if date_str and temp_path and os.path.exists(temp_path):
                 try:
-                    ds = xr.open_dataset(temp_path)
+                    # Verify file was downloaded correctly
+                    file_size = os.path.getsize(temp_path)
+                    print(f"[INFO] NetCDF file downloaded: {file_size} bytes")
+                    
+                    # Check file magic number to verify format
+                    with open(temp_path, 'rb') as f:
+                        magic = f.read(4)
+                        print(f"[INFO] File magic number: {magic.hex()}")
+                    
+                    # Check if it's a ZIP file (magic: 504b0304 = "PK")
+                    if magic.startswith(b'PK'):
+                        print(f"[INFO] File is ZIP format, extracting...")
+                        
+                        # Create new temp file for extracted NetCDF FIRST
+                        extracted_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.nc')
+                        extracted_path = extracted_temp.name
+                        extracted_temp.close()
+                        
+                        # Extract the NetCDF file from ZIP
+                        with zipfile.ZipFile(temp_path, 'r') as zip_ref:
+                            # Get the first .nc file in the archive
+                            nc_files = [f for f in zip_ref.namelist() if f.endswith('.nc')]
+                            if not nc_files:
+                                raise Exception("No .nc file found in ZIP archive")
+                            
+                            nc_filename = nc_files[0]
+                            print(f"[INFO] Extracting {nc_filename} from ZIP...")
+                            
+                            # Extract the file
+                            with zip_ref.open(nc_filename) as source:
+                                with open(extracted_path, 'wb') as target:
+                                    target.write(source.read())
+                        
+                        # Now safe to delete the ZIP file (after closing zipfile)
+                        try:
+                            os.unlink(temp_path)
+                        except:
+                            pass  # Ignore errors on cleanup
+                        
+                        # Update temp_path to point to extracted file
+                        temp_path = extracted_path
+                        print(f"[INFO] NetCDF extracted successfully")
+                    
+                    # Now open the NetCDF file (either direct or extracted from ZIP)
+                    ds = xr.open_dataset(temp_path, engine='netcdf4')
                     
                     # Convert from Kelvin to Celsius
                     temp_kelvin = float(ds['t2m'].mean().values)
                     temp_celsius = temp_kelvin - 273.15
+                    
+                    # Get precipitation (in meters, convert to mm)
+                    precip_m = float(ds['tp'].mean().values) if 'tp' in ds else 0.0
+                    precip_mm = precip_m * 1000  # meters to millimeters
                     
                     # Determine heat wave risk
                     if temp_celsius > 35:
@@ -369,10 +421,11 @@ class EnvironmentalService:
                     
                     ds.close()
                     
-                    print(f"[INFO] ✅ Temperature data retrieved: {temp_celsius:.1f}°C from {date_str}")
+                    print(f"[INFO] ✅ Temperature: {temp_celsius:.1f}°C, Precipitation: {precip_mm:.1f}mm from {date_str}")
                     
                     return {
                         "current": round(temp_celsius, 1),
+                        "precipitation_mm": round(precip_mm, 2),
                         "heat_wave_risk": risk,
                         "source": "Copernicus ERA5 Reanalysis",
                         "date": date_str,
@@ -449,33 +502,127 @@ class EnvironmentalService:
             "note": "May require additional data sources"
         }
     
-    def estimate_co2_emissions(self, lat, lon):
+    def estimate_co2_emissions(self, lat, lon, country=None):
         """
-        Estimate CO2 emissions for the area
+        Get CO2 emissions data from World Bank
         
         Args:
             lat (float): Latitude
             lon (float): Longitude
+            country (str, optional): Country name
             
         Returns:
-            dict: CO2 emission estimates
+            dict: CO2 emission data
         """
         try:
-            # Copernicus dataset: 'cams-global-greenhouse-gas-reanalysis'
-            # Requires: CH4, CO2 concentrations
-            # Alternative: Use World Bank emissions data by country
-            # Or EDGAR (Emissions Database for Global Atmospheric Research)
+            if not country:
+                return {
+                    "emissions_tons_per_year": 0.0,
+                    "per_capita": 0.0,
+                    "trend": "stable",
+                    "source": "World Bank",
+                    "note": "Country name required"
+                }
+            
+            iso3_map = {
+                "Nigeria": "NGA", "Kenya": "KEN", "South Africa": "ZAF", "Egypt": "EGY",
+                "Ethiopia": "ETH", "Ghana": "GHA", "Morocco": "MAR", "Algeria": "DZA",
+                "Tanzania": "TZA", "Uganda": "UGA", "Senegal": "SEN", "Rwanda": "RWA"
+            }
+            
+            iso3 = iso3_map.get(country, country.upper()[:3])
+            
+            # CO2 emissions (metric tons per capita)
+            url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/EN.ATM.CO2E.PC"
+            params = {"format": "json", "date": "2015:2023", "per_page": 20}
+            
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.ok:
+                data = response.json()
+                if len(data) > 1 and data[1]:
+                    for entry in data[1]:
+                        if entry.get('value'):
+                            co2_per_capita = round(entry['value'], 2)
+                            year = entry['date']
+                            
+                            print(f"[INFO] ✅ CO2 emissions: {co2_per_capita} metric tons per capita ({year})")
+                            
+                            return {
+                                "per_capita": co2_per_capita,
+                                "source": "World Bank",
+                                "year": year,
+                                "status": "success"
+                            }
             
             return {
-                "emissions_tons_per_year": 0.0,
                 "per_capita": 0.0,
-                "trend": "stable",  # increasing, stable, decreasing
-                "source": "World Bank / EDGAR (emissions data not yet integrated)",
-                "note": "Requires World Bank API or EDGAR database integration"
+                "source": "World Bank",
+                "note": f"No CO2 data available for {country}"
             }
             
         except Exception as e:
-            return {"emissions_tons_per_year": 0.0, "error": str(e)}
+            return {"per_capita": 0.0, "error": str(e)}
+    
+    def get_tree_cover_loss(self, lat, lon, country=None):
+        """
+        Get tree cover loss data from World Bank
+        
+        Args:
+            lat (float): Latitude
+            lon (float): Longitude
+            country (str, optional): Country name
+            
+        Returns:
+            dict: Tree cover loss data
+        """
+        try:
+            if not country:
+                return {
+                    "hectares_lost": 0.0,
+                    "source": "World Bank",
+                    "note": "Country name required"
+                }
+            
+            iso3_map = {
+                "Nigeria": "NGA", "Kenya": "KEN", "South Africa": "ZAF", "Egypt": "EGY",
+                "Ethiopia": "ETH", "Ghana": "GHA", "Morocco": "MAR", "Algeria": "DZA",
+                "Tanzania": "TZA", "Uganda": "UGA", "Senegal": "SEN", "Rwanda": "RWA"
+            }
+            
+            iso3 = iso3_map.get(country, country.upper()[:3])
+            
+            # Forest area (% of land area)
+            url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/AG.LND.FRST.ZS"
+            params = {"format": "json", "date": "2015:2023", "per_page": 20}
+            
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.ok:
+                data = response.json()
+                if len(data) > 1 and data[1]:
+                    for entry in data[1]:
+                        if entry.get('value'):
+                            forest_pct = round(entry['value'], 2)
+                            year = entry['date']
+                            
+                            print(f"[INFO] ✅ Forest area: {forest_pct}% of land area ({year})")
+                            
+                            return {
+                                "forest_percentage": forest_pct,
+                                "source": "World Bank",
+                                "year": year,
+                                "status": "success"
+                            }
+            
+            return {
+                "forest_percentage": 0.0,
+                "source": "World Bank",
+                "note": f"No forest data available for {country}"
+            }
+            
+        except Exception as e:
+            return {"forest_percentage": 0.0, "error": str(e)}
     
     def get_climate_risks(self, lat, lon):
         """

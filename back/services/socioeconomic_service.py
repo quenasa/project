@@ -66,6 +66,18 @@ class SocioeconomicService:
             hdi = self.estimate_local_hdi(lat, lon, country)
             data["human_development_index"] = hdi
             
+            # 6. Unemployment rate
+            unemployment = self.get_unemployment_rate(lat, lon, country)
+            data["unemployment"] = unemployment
+            
+            # 7. Water withdrawal
+            water_use = self.get_water_withdrawal(lat, lon, country)
+            data["water_withdrawal"] = water_use
+            
+            # 8. Health coverage index
+            health = self.get_health_coverage_index(lat, lon, country)
+            data["health_coverage"] = health
+            
         except Exception as e:
             print(f"Error fetching socioeconomic data: {e}")
             data["error"] = str(e)
@@ -219,32 +231,117 @@ class SocioeconomicService:
     
     def get_services_access(self, lat, lon, country=None):
         """
-        Get access to basic services (water, health, education)
+        Get access to basic services using World Bank indicators
         
         Args:
             lat (float): Latitude
             lon (float): Longitude
-            country (str, optional): Country code
+            country (str, optional): Country name
             
         Returns:
-            dict: Services access indicators (0-100%)
+            dict: Services access indicators
         """
         try:
-            # Requires:
-            # 1. DHS (Demographic and Health Surveys): https://dhsprogram.com/data/
-            # 2. WorldPop accessibility datasets (travel time to facilities)
-            # 3. Or national statistics bureaus
-            # 4. WHO/UNICEF Joint Monitoring Programme for Water Supply
+            if not country:
+                return {
+                    "water": 0.0,
+                    "health": 0.0,
+                    "education": 0.0,
+                    "electricity": 0.0,
+                    "sanitation": 0.0,
+                    "source": "World Bank",
+                    "note": "Country name required"
+                }
             
-            return {
-                "water": 0.0,      # % with access to clean water
-                "health": 0.0,     # % with access to health facilities
-                "education": 0.0,  # % with access to schools
-                "electricity": 0.0,
-                "sanitation": 0.0,
-                "source": "DHS / National statistics not integrated",
-                "note": "Requires DHS API or national statistics bureau data"
+            iso3_map = {
+                "Nigeria": "NGA", "Kenya": "KEN", "South Africa": "ZAF", "Egypt": "EGY",
+                "Ethiopia": "ETH", "Ghana": "GHA", "Morocco": "MAR", "Algeria": "DZA",
+                "Tanzania": "TZA", "Uganda": "UGA", "Senegal": "SEN", "Rwanda": "RWA"
             }
+            
+            iso3 = iso3_map.get(country, country.upper()[:3])
+            
+            # School enrollment (% net)
+            school_url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/SE.PRM.NENR"
+            # Access to electricity (% of population)
+            elec_url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/EG.ELC.ACCS.ZS"
+            # Improved water source (% of population)
+            water_url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/SH.H2O.BASW.ZS"
+            # Improved sanitation (% of population)
+            sanit_url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/SH.STA.BASS.ZS"
+            
+            params = {"format": "json", "date": "2015:2023", "per_page": 20}
+            
+            results = {
+                "education": 0.0,
+                "electricity": 0.0,
+                "water": 0.0,
+                "sanitation": 0.0,
+                "health": 0.0,  # No hay API directa, se deja en 0
+                "source": "World Bank"
+            }
+            
+            # Get school enrollment
+            try:
+                resp = requests.get(school_url, params=params, timeout=10)
+                if resp.ok:
+                    data = resp.json()
+                    if len(data) > 1 and data[1]:
+                        for entry in data[1]:
+                            if entry.get('value'):
+                                results["education"] = round(entry['value'], 1)
+                                results["education_year"] = entry['date']
+                                break
+            except:
+                pass
+            
+            # Get electricity access
+            try:
+                resp = requests.get(elec_url, params=params, timeout=10)
+                if resp.ok:
+                    data = resp.json()
+                    if len(data) > 1 and data[1]:
+                        for entry in data[1]:
+                            if entry.get('value'):
+                                results["electricity"] = round(entry['value'], 1)
+                                results["electricity_year"] = entry['date']
+                                break
+            except:
+                pass
+            
+            # Get water access
+            try:
+                resp = requests.get(water_url, params=params, timeout=10)
+                if resp.ok:
+                    data = resp.json()
+                    if len(data) > 1 and data[1]:
+                        for entry in data[1]:
+                            if entry.get('value'):
+                                results["water"] = round(entry['value'], 1)
+                                results["water_year"] = entry['date']
+                                break
+            except:
+                pass
+            
+            # Get sanitation access
+            try:
+                resp = requests.get(sanit_url, params=params, timeout=10)
+                if resp.ok:
+                    data = resp.json()
+                    if len(data) > 1 and data[1]:
+                        for entry in data[1]:
+                            if entry.get('value'):
+                                results["sanitation"] = round(entry['value'], 1)
+                                results["sanitation_year"] = entry['date']
+                                break
+            except:
+                pass
+            
+            if any(results[k] > 0 for k in ["education", "electricity", "water", "sanitation"]):
+                results["status"] = "success"
+                print(f"[INFO] ✅ Services access: Education={results['education']}%, Electricity={results['electricity']}%, Water={results['water']}%")
+            
+            return results
             
         except Exception as e:
             return {
@@ -443,3 +540,135 @@ class SocioeconomicService:
         }
         
         return country_codes.get(country_name.lower(), country_name.upper()[:3])
+    
+    def get_unemployment_rate(self, lat, lon, country=None):
+        """
+        Get unemployment rate from World Bank
+        
+        Args:
+            lat (float): Latitude
+            lon (float): Longitude
+            country (str, optional): Country name
+            
+        Returns:
+            dict: Unemployment data
+        """
+        try:
+            if not country:
+                return {"unemployment_rate": 0.0, "source": "World Bank", "note": "Country name required"}
+            
+            iso3 = self._get_iso3_code(country)
+            
+            # Unemployment, total (% of total labor force)
+            url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/SL.UEM.TOTL.ZS"
+            params = {"format": "json", "date": "2015:2023", "per_page": 20}
+            
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.ok:
+                data = response.json()
+                if len(data) > 1 and data[1]:
+                    for entry in data[1]:
+                        if entry.get('value'):
+                            rate = round(entry['value'], 1)
+                            year = entry['date']
+                            print(f"[INFO] ✅ Unemployment rate: {rate}% ({year})")
+                            return {
+                                "unemployment_rate": rate,
+                                "source": "World Bank",
+                                "year": year,
+                                "status": "success"
+                            }
+            
+            return {"unemployment_rate": 0.0, "source": "World Bank", "note": f"No data for {country}"}
+        
+        except Exception as e:
+            return {"unemployment_rate": 0.0, "error": str(e)}
+    
+    def get_water_withdrawal(self, lat, lon, country=None):
+        """
+        Get water withdrawal data from World Bank
+        
+        Args:
+            lat (float): Latitude
+            lon (float): Longitude
+            country (str, optional): Country name
+            
+        Returns:
+            dict: Water withdrawal data
+        """
+        try:
+            if not country:
+                return {"water_withdrawal": 0.0, "source": "World Bank", "note": "Country name required"}
+            
+            iso3 = self._get_iso3_code(country)
+            
+            # Annual freshwater withdrawals (% of internal resources)
+            url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/ER.H2O.FWTL.ZS"
+            params = {"format": "json", "date": "2000:2023", "per_page": 30}
+            
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.ok:
+                data = response.json()
+                if len(data) > 1 and data[1]:
+                    for entry in data[1]:
+                        if entry.get('value'):
+                            withdrawal_pct = round(entry['value'], 2)
+                            year = entry['date']
+                            print(f"[INFO] ✅ Water withdrawal: {withdrawal_pct}% of internal resources ({year})")
+                            return {
+                                "withdrawal_percentage": withdrawal_pct,
+                                "source": "World Bank",
+                                "year": year,
+                                "status": "success"
+                            }
+            
+            return {"withdrawal_percentage": 0.0, "source": "World Bank", "note": f"No data for {country}"}
+        
+        except Exception as e:
+            return {"withdrawal_percentage": 0.0, "error": str(e)}
+    
+    def get_health_coverage_index(self, lat, lon, country=None):
+        """
+        Get health service coverage index from World Bank
+        
+        Args:
+            lat (float): Latitude
+            lon (float): Longitude
+            country (str, optional): Country name
+            
+        Returns:
+            dict: Health coverage data
+        """
+        try:
+            if not country:
+                return {"health_coverage_index": 0.0, "source": "World Bank", "note": "Country name required"}
+            
+            iso3 = self._get_iso3_code(country)
+            
+            # UHC service coverage index
+            url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/SH.UHC.SRVS.CV.XD"
+            params = {"format": "json", "date": "2015:2023", "per_page": 20}
+            
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.ok:
+                data = response.json()
+                if len(data) > 1 and data[1]:
+                    for entry in data[1]:
+                        if entry.get('value'):
+                            index = round(entry['value'], 1)
+                            year = entry['date']
+                            print(f"[INFO] ✅ Health coverage index: {index} ({year})")
+                            return {
+                                "health_coverage_index": index,
+                                "source": "World Bank",
+                                "year": year,
+                                "status": "success"
+                            }
+            
+            return {"health_coverage_index": 0.0, "source": "World Bank", "note": f"No data for {country}"}
+        
+        except Exception as e:
+            return {"health_coverage_index": 0.0, "error": str(e)}
