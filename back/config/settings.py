@@ -17,7 +17,7 @@ class Config:
     
     # Cache settings
     CACHE_TYPE = 'simple'
-    CACHE_DEFAULT_TIMEOUT = 3600  # 1 hour
+    CACHE_DEFAULT_TIMEOUT = 0  # 0 = disabled, 3600 = 1 hour
     
     # Rate limiting settings
     RATELIMIT_STORAGE_URL = "memory://"

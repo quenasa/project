@@ -72,7 +72,9 @@ back/
 - ✅ **Copernicus CDS** - Datos ambientales (clima, aire, temperatura)
 - ✅ **WorldPop API** - Datos socioeconómicos (población, demografía)
 - ✅ **Datos actuales** - Llamadas a APIs con fecha de hoy
+- ✅ **Auto-configuración** - Crea `.cdsapirc` automáticamente desde `.env`
 - ✅ **CORS habilitado** - Listo para integrar con frontend
+- ✅ **Listo para deploy** - Funciona en local y en servidores web
 - ✅ **Factory Pattern** - Creación de app con diferentes configuraciones
 
 ## 📡 APIs Integradas
@@ -176,7 +178,26 @@ WORLDPOP_API_URL=https://www.worldpop.org/sdi/api
 
 Ver **`API_AFRICA_SETUP.md`** para instrucciones detalladas de obtención de claves.
 
-## 🔧 Comandos útiles
+## � Deploy en Producción
+
+El backend está **listo para desplegar** en cualquier servidor. Solo necesitas:
+
+1. **Variables de entorno** en el servidor:
+   - `COPERNICUS_API_KEY` - Tu clave de Copernicus
+   - `COPERNICUS_API_URL` - URL de la API (por defecto: https://cds.climate.copernicus.eu/api)
+   - `WORLDPOP_API_URL` - URL de WorldPop (por defecto: https://www.worldpop.org/sdi/api)
+
+2. **Auto-configuración**: El backend **crea automáticamente** el archivo `.cdsapirc` desde las variables de entorno, por lo que funciona tanto en:
+   - ✅ Local (Windows, macOS, Linux)
+   - ✅ Heroku
+   - ✅ AWS (EC2, Lambda, Elastic Beanstalk)
+   - ✅ DigitalOcean
+   - ✅ Google Cloud
+   - ✅ Azure
+
+3. **No necesitas configurar nada más** - Solo las variables de entorno
+
+## �🔧 Comandos útiles
 
 ```powershell
 # Instalar dependencias

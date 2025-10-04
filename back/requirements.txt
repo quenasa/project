@@ -4,4 +4,7 @@ Flask-Limiter==3.5.0
 Flask-Caching==2.1.0
 requests==2.31.0
 python-dotenv==1.0.0
-cdsapi==0.6.1
+cdsapi>=0.7.7
+xarray>=2023.1.0
+netCDF4>=1.6.0
+cfgrib>=0.9.10

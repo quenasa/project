@@ -90,18 +90,14 @@ class SocioeconomicService:
             today = datetime.now()
             current_year = today.year
             
-            # WorldPop API endpoint for population data
-            # Example: /v1/wopr/pointtotal
-            # TODO: Implement actual WorldPop API call
-            # Documentation: https://www.worldpop.org/sdi/introapi/
+            # WorldPop REST API provides GeoTIFF files, not point queries
+            # To implement: Download country GeoTIFF, extract point value
+            # API: https://www.worldpop.org/rest/data/pop/wpgp
             # 
-            # params = {
-            #     'lat': lat,
-            #     'lon': lon,
-            #     'year': current_year,
-            #     'spatialresolution': '1km'
-            # }
-            # response = requests.get(f"{self.worldpop_url}/v1/wopr/pointtotal", params=params)
+            # For production:
+            # 1. Use WOPR API if available for country: https://wopr.worldpop.org/
+            # 2. Or integrate with local census data
+            # 3. Or download and cache GeoTIFF files per country
             
             return {
                 "total": 0,
@@ -113,8 +109,8 @@ class SocioeconomicService:
                     "15-64": 0,
                     "65+": 0
                 },
-                "source": "WorldPop",
-                "note": "Implement actual WorldPop API call"
+                "source": "WorldPop (requires GeoTIFF download)",
+                "note": "WorldPop API provides raster files, not point queries. Requires downloading country data."
             }
             
         except Exception as e:
@@ -126,28 +122,96 @@ class SocioeconomicService:
     
     def get_poverty_index(self, lat, lon, country=None):
         """
-        Calculate poverty index for the area
+        Get poverty data from World Bank API
         
         Args:
             lat (float): Latitude
             lon (float): Longitude
-            country (str, optional): Country code
+            country (str, optional): Country name
             
         Returns:
-            float: Poverty index (0-100, higher = more poverty)
+            dict: Poverty indicators
         """
         try:
-            # This can be derived from:
-            # - Population density + economic activity
-            # - Nighttime lights data (proxy for economic development)
-            # - WorldPop poverty layers if available
+            if not country:
+                return {
+                    "index": 0.0,
+                    "percentage_below_poverty_line": 0.0,
+                    "gini_coefficient": 0.0,
+                    "source": "World Bank",
+                    "note": "Country name required"
+                }
+            
+            # Get country ISO3 code
+            iso3_map = {
+                "Nigeria": "NGA", "Kenya": "KEN", "South Africa": "ZAF", "Egypt": "EGY",
+                "Ethiopia": "ETH", "Ghana": "GHA", "Morocco": "MAR", "Algeria": "DZA",
+                "Tanzania": "TZA", "Uganda": "UGA", "Senegal": "SEN", "Rwanda": "RWA"
+            }
+            
+            iso3 = iso3_map.get(country, country.upper()[:3])
+            
+            print(f"[INFO] Fetching poverty data from World Bank for {country}...")
+            
+            # Poverty headcount ratio at $2.15 a day (2017 PPP)
+            poverty_url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/SI.POV.DDAY"
+            gini_url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/SI.POV.GINI"
+            
+            params = {
+                "format": "json",
+                "date": "2010:2023",
+                "per_page": 20
+            }
+            
+            poverty_rate = 0.0
+            gini = 0.0
+            poverty_year = None
+            gini_year = None
+            
+            # Get poverty rate
+            response = requests.get(poverty_url, params=params, timeout=10)
+            if response.ok:
+                data = response.json()
+                if len(data) > 1 and data[1]:
+                    for entry in data[1]:
+                        if entry.get('value'):
+                            poverty_rate = round(entry['value'], 2)
+                            poverty_year = entry['date']
+                            break
+            
+            # Get Gini coefficient
+            response = requests.get(gini_url, params=params, timeout=10)
+            if response.ok:
+                data = response.json()
+                if len(data) > 1 and data[1]:
+                    for entry in data[1]:
+                        if entry.get('value'):
+                            gini = round(entry['value'], 2)
+                            gini_year = entry['date']
+                            break
+            
+            if poverty_rate > 0 or gini > 0:
+                print(f"[INFO] ✅ Poverty data: {poverty_rate}% below poverty line, Gini: {gini}")
+                
+                # Calculate composite poverty index (0-100)
+                poverty_index = round((poverty_rate + gini) / 2, 2) if poverty_rate and gini else poverty_rate
+                
+                return {
+                    "index": poverty_index,
+                    "percentage_below_poverty_line": poverty_rate,
+                    "gini_coefficient": gini,
+                    "source": "World Bank",
+                    "poverty_year": poverty_year,
+                    "gini_year": gini_year,
+                    "status": "success"
+                }
             
             return {
-                "index": 0.0,  # 0-100
+                "index": 0.0,
                 "percentage_below_poverty_line": 0.0,
-                "gini_coefficient": 0.0,  # Income inequality
-                "source": "WorldPop / World Bank",
-                "note": "Implement poverty calculation"
+                "gini_coefficient": 0.0,
+                "source": "World Bank",
+                "note": f"No poverty data available for {country}"
             }
             
         except Exception as e:
@@ -166,10 +230,11 @@ class SocioeconomicService:
             dict: Services access indicators (0-100%)
         """
         try:
-            # Can use WorldPop datasets on:
-            # - Health facility accessibility
-            # - School accessibility
-            # - Water access
+            # Requires:
+            # 1. DHS (Demographic and Health Surveys): https://dhsprogram.com/data/
+            # 2. WorldPop accessibility datasets (travel time to facilities)
+            # 3. Or national statistics bureaus
+            # 4. WHO/UNICEF Joint Monitoring Programme for Water Supply
             
             return {
                 "water": 0.0,      # % with access to clean water
@@ -177,8 +242,8 @@ class SocioeconomicService:
                 "education": 0.0,  # % with access to schools
                 "electricity": 0.0,
                 "sanitation": 0.0,
-                "source": "WorldPop / DHS",
-                "note": "Implement services access calculation"
+                "source": "DHS / National statistics not integrated",
+                "note": "Requires DHS API or national statistics bureau data"
             }
             
         except Exception as e:
@@ -191,28 +256,86 @@ class SocioeconomicService:
     
     def estimate_income_level(self, lat, lon, country=None):
         """
-        Estimate average income level for the area
+        Estimate average income level using World Bank GDP data
         
         Args:
             lat (float): Latitude
             lon (float): Longitude
-            country (str, optional): Country code
+            country (str, optional): Country name
             
         Returns:
             dict: Income estimates
         """
         try:
-            # Can be estimated using:
-            # - Nighttime lights (economic activity proxy)
-            # - Population density + country GDP per capita
-            # - Urban vs rural classification
+            if not country:
+                return {
+                    "average_annual_usd": 0.0,
+                    "median_annual_usd": 0.0,
+                    "economic_activity_level": "unknown",
+                    "source": "World Bank",
+                    "note": "Country name required for GDP data"
+                }
             
+            # Get country ISO3 code
+            iso3_map = {
+                "Nigeria": "NGA", "Kenya": "KEN", "South Africa": "ZAF", "Egypt": "EGY",
+                "Ethiopia": "ETH", "Ghana": "GHA", "Morocco": "MAR", "Algeria": "DZA",
+                "Tanzania": "TZA", "Uganda": "UGA", "Senegal": "SEN", "Rwanda": "RWA"
+            }
+            
+            iso3 = iso3_map.get(country)
+            if not iso3:
+                # Try to use country as-is if it's already ISO3
+                iso3 = country.upper()[:3]
+            
+            print(f"[INFO] Fetching GDP data from World Bank for {country} ({iso3})...")
+            
+            # World Bank API - GDP per capita (current US$)
+            url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/NY.GDP.PCAP.CD"
+            params = {
+                "format": "json",
+                "date": "2022:2023",  # Get latest 2 years
+                "per_page": 10
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.ok:
+                data = response.json()
+                
+                if len(data) > 1 and data[1]:
+                    # Get most recent value
+                    for entry in data[1]:
+                        if entry.get('value'):
+                            gdp_per_capita = round(entry['value'], 2)
+                            year = entry['date']
+                            
+                            # Classify economic activity
+                            if gdp_per_capita < 2000:
+                                level = "low"
+                            elif gdp_per_capita < 8000:
+                                level = "medium"
+                            else:
+                                level = "high"
+                            
+                            print(f"[INFO] ✅ GDP per capita: ${gdp_per_capita} ({year})")
+                            
+                            return {
+                                "average_annual_usd": gdp_per_capita,
+                                "median_annual_usd": gdp_per_capita * 0.8,  # Rough estimate
+                                "economic_activity_level": level,
+                                "source": "World Bank",
+                                "year": year,
+                                "status": "success"
+                            }
+            
+            print(f"[INFO] No GDP data found for {country}")
             return {
                 "average_annual_usd": 0.0,
                 "median_annual_usd": 0.0,
-                "economic_activity_level": "unknown",  # low, medium, high
-                "source": "Estimated from multiple indicators",
-                "note": "Implement income estimation"
+                "economic_activity_level": "unknown",
+                "source": "World Bank",
+                "note": f"No GDP data available for {country}"
             }
             
         except Exception as e:
@@ -232,9 +355,12 @@ class SocioeconomicService:
         """
         try:
             # HDI combines:
-            # - Life expectancy (health)
-            # - Education level
-            # - Income per capita
+            # 1. Life expectancy (health) - WHO or national health data
+            # 2. Education level - UNESCO or DHS data
+            # 3. Income per capita - World Bank data
+            # 
+            # UNDP provides country-level HDI: http://hdr.undp.org/en/data
+            # For sub-national, need to combine local health, education, income data
             
             return {
                 "index": 0.0,  # 0-1
@@ -244,8 +370,8 @@ class SocioeconomicService:
                     "income": 0.0
                 },
                 "classification": "unknown",  # low, medium, high, very high
-                "source": "Local estimation from available data",
-                "note": "Implement HDI calculation"
+                "source": "UNDP / WHO / UNESCO data not integrated",
+                "note": "Requires UNDP HDI data, WHO health data, UNESCO education data"
             }
             
         except Exception as e:

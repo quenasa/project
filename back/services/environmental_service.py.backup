@@ -11,45 +11,33 @@ from flask import current_app
 
 try:
     import xarray as xr
-    XARRAY_AVAILABLE = True
+                              'time': ['00:00', '12:00'],
+                            'area': [north, west, south, east],
+                            'format': 'netcdf'
+                        },
+                        temp_path
+                    )
+                    
+                    # If we get here, the request succeeded!
+                    break
+                    
+                except Exception as e:
+                    last_error = e
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                    
+                    if "not available yet" in str(e).lower():
+                        print(f"[INFO] Data not available for {date_str}, trying older date...")
+                        continue
+                    else:
+                        raise
+            
+            # Check if we found valid data
+            if date_str and os.path.exists(temp_path):
+                try:AY_AVAILABLE = True
 except ImportError:
     XARRAY_AVAILABLE = False
     print("[WARNING] xarray not installed. Install with: pip install xarray netCDF4")
-
-
-class EnvironmentalService:
-    """Service for environmental data operations using Copernicus CDS API"""
-    
-    def __init__(self):
-        """Initialize the environmental service with Copernicus client"""
-        self.copernicus_url = None
-        self.copernicus_key = None
-        self.cds_client = None
-    
-    def _find_most_recent_date(self, max_days_back=30):
-        """
-        Find the most recent date with available data.
-        Tries progressively older dates until data is found.
-        
-        Args:
-            max_days_back (int): Maximum number of days to look back
-            
-        Returns:
-            dict: Climate risk assessment
-        """
-        # Requires:
-        # 1. Historical precipitation data from ERA5
-        # 2. Flood risk maps from GLOFAS (Global Flood Awareness System)
-        # 3. Drought indicators from Copernicus Emergency Management Service
-        # 4. Or integrate with local climate agencies
-        
-        return {
-            "flood_risk": "medium",
-            "drought_risk": "medium",
-            "extreme_weather_risk": "medium",
-            "source": "Climate risk assessment not yet integrated",
-            "note": "Requires ERA5 precipitation, GLOFAS flood data, or local climate agency APIs"
-        }
 
 
 class EnvironmentalService:
@@ -175,7 +163,7 @@ class EnvironmentalService:
     
     def get_air_quality(self, lat, lon):
         """
-        Get air quality data from OpenAQ API (real-time monitoring stations)
+        Get air quality data from Copernicus Atmospheric Monitoring Service
         
         Args:
             lat (float): Latitude
@@ -185,78 +173,114 @@ class EnvironmentalService:
             dict: Air quality indicators (PM2.5, NO2, O3, etc.)
         """
         try:
-            # Use OpenAQ API for real air quality data
-            # Finds nearest monitoring station within 50km radius
-            print(f"[INFO] Fetching air quality data from OpenAQ...")
+            self._init_copernicus_client()
             
-            # OpenAQ API v2 - get latest measurements near coordinates
-            url = "https://api.openaq.org/v2/latest"
-            params = {
-                "coordinates": f"{lat},{lon}",
-                "radius": 50000,  # 50km radius
-                "limit": 10,
-                "order_by": "distance"
-            }
+            if not self.cds_client:
+                # Return placeholder if API not configured
+                return {
+                    "pm25": 0.0,
+                    "no2": 0.0,
+                    "ozone": 0.0,
+                    "status": "API not configured - add COPERNICUS_API_KEY with format UID:KEY"
+                }
             
-            response = requests.get(url, params=params, timeout=10)
+            if not XARRAY_AVAILABLE:
+                return {
+                    "pm25": 0.0,
+                    "no2": 0.0,
+                    "ozone": 0.0,
+                    "status": "xarray not installed - run: pip install xarray netCDF4"
+                }
             
-            if response.ok:
-                data = response.json()
+            # Create bounding box around the point (±0.5 degrees)
+            north = min(lat + 0.5, 90)
+            south = max(lat - 0.5, -90)
+            west = max(lon - 0.5, -180)
+            east = min(lon + 0.5, 180)
+            
+            # Try to get the most recent available data
+            # CAMS reanalysis typically has 2-5 day delay
+            last_error = None
+            date_str = None
+            
+            for days_back in range(2, 15):  # Try from 2 to 14 days ago
+                try:
+                    target_date = datetime.now() - timedelta(days=days_back)
+                    date_str = target_date.strftime('%Y-%m-%d')
+                    
+                    # Create temporary file
+                    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.nc')
+                    temp_path = temp_file.name
+                    temp_file.close()
+                    
+                    # Request air quality data from CAMS
+                    print(f"[INFO] Trying air quality data from Copernicus for {date_str} ({days_back} days ago)...")
+                    
+                    self.cds_client.retrieve(
+                        'cams-global-reanalysis-eac4',
+                        {
+                            'date': date_str,
+                            'variable': [
+                                'particulate_matter_2.5um',
+                                'nitrogen_dioxide',
+                                'ozone'
+                            ],
+                            'time': '00:00',
+                            'area': [north, west, south, east],  # N, W, S, E
+                            'format': 'netcdf'
+                        },
+                        temp_path
+                    )
+                    
+                    # If we get here, the request succeeded!
+                    break
+                    
+                except Exception as e:
+                    last_error = e
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                    
+                    # Check if it's a "data not available yet" error
+                    if "not available yet" in str(e).lower() or "not found" in str(e).lower():
+                        print(f"[INFO] Data not available for {date_str}, trying older date...")
+                        continue
+                    else:
+                        # Different error, stop trying
+                        raise
+            
+            # Check if we found valid data
+            if date_str and os.path.exists(temp_path):
+                try:
                 
-                if data.get('results') and len(data['results']) > 0:
-                    # Extract measurements from nearest stations
-                    pm25_values = []
-                    no2_values = []
-                    o3_values = []
-                    station_name = None
-                    distance_km = None
+                    # Read the NetCDF file
+                    ds = xr.open_dataset(temp_path)
                     
-                    for station in data['results']:
-                        if not station_name:
-                            station_name = station.get('location', 'Unknown')
-                            # Distance is in meters, convert to km
-                            distance_m = station.get('distance', 0)
-                            distance_km = round(distance_m / 1000, 1) if distance_m else None
-                        
-                        for measurement in station.get('measurements', []):
-                            param = measurement.get('parameter')
-                            value = measurement.get('value')
-                            
-                            if value is not None:
-                                if param == 'pm25':
-                                    pm25_values.append(value)
-                                elif param == 'no2':
-                                    no2_values.append(value)
-                                elif param in ['o3', 'ozone']:
-                                    o3_values.append(value)
+                    # Extract values (average over the area)
+                    pm25 = float(ds['pm2p5'].mean().values) if 'pm2p5' in ds else 0.0
+                    no2 = float(ds['no2'].mean().values) if 'no2' in ds else 0.0
+                    o3 = float(ds['o3'].mean().values) if 'o3' in ds else 0.0
                     
-                    # Calculate averages
-                    pm25 = round(sum(pm25_values) / len(pm25_values), 2) if pm25_values else 0.0
-                    no2 = round(sum(no2_values) / len(no2_values), 2) if no2_values else 0.0
-                    o3 = round(sum(o3_values) / len(o3_values), 2) if o3_values else 0.0
+                    ds.close()
                     
-                    print(f"[INFO] ✅ Air quality data retrieved from OpenAQ: PM2.5={pm25}, NO2={no2}")
+                    print(f"[INFO] ✅ Air quality data retrieved successfully from {date_str}")
                     
                     return {
-                        "pm25": pm25,  # μg/m³
-                        "no2": no2,   # μg/m³
-                        "ozone": o3,  # μg/m³
-                        "source": "OpenAQ",
-                        "station": station_name,
-                        "distance_km": distance_km,
+                        "pm25": round(pm25, 2),  # μg/m³
+                        "no2": round(no2, 2),   # μg/m³
+                        "ozone": round(o3, 2), # μg/m³
+                        "source": "Copernicus CAMS EAC4 Reanalysis",
+                        "date": date_str,
+                        "days_old": days_back,
                         "status": "success"
                     }
-            
-            # No data available from OpenAQ
-            print(f"[INFO] No air quality stations found near location")
-            return {
-                "pm25": 0.0,
-                "no2": 0.0,
-                "ozone": 0.0,
-                "source": "OpenAQ",
-                "status": "no_nearby_stations",
-                "note": "No monitoring stations within 50km radius"
-            }
+                    
+                finally:
+                    # Clean up temp file
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+            else:
+                # No data found in the range
+                raise Exception(f"No data available in the last 14 days. Last error: {last_error}")
             
         except Exception as e:
             print(f"[ERROR] Air quality retrieval failed: {e}")
@@ -306,8 +330,8 @@ class EnvironmentalService:
             last_error = None
             date_str = None
             temp_path = None
-
-            for days_back in range(5, 50):  # Try from 5 to 49 days ago
+            
+            for days_back in range(5, 20):  # Try from 5 to 19 days ago
                 try:
                     target_date = datetime.now() - timedelta(days=days_back)
                     date_str = target_date.strftime('%Y-%m-%d')
@@ -405,26 +429,18 @@ class EnvironmentalService:
             lon (float): Longitude
             
         Returns:
-            dict: Vegetation coverage data
+            float: Vegetation coverage percentage
         """
         try:
-            # Available Copernicus datasets for vegetation:
-            # 1. 'satellite-lai-fapar' - Leaf Area Index and Fraction of Absorbed Photosynthetically Active Radiation
-            # 2. 'satellite-land-cover' - Land cover classification
-            # 
-            # NDVI calculation requires:
-            # - Download Sentinel-2 imagery
-            # - Calculate NDVI = (NIR - Red) / (NIR + Red)
-            # - Or use Google Earth Engine API
-            #
-            # For production: Integrate with Sentinel Hub API or Google Earth Engine
+            # Dataset: satellite-land-cover or NDVI data
+            # This helps measure green zones and biodiversity
             
             return {
                 "coverage_percentage": 0.0,  # 0-100%
                 "ndvi": 0.0,  # -1 to 1
                 "green_zones": "low",  # low, medium, high
-                "source": "Copernicus Sentinel (requires Sentinel Hub API)",
-                "note": "Requires Sentinel Hub or Google Earth Engine for NDVI calculation"
+                "source": "Copernicus Land Monitoring",
+                "note": "Implement NDVI calculation"
             }
             
         except Exception as e:
@@ -461,17 +477,15 @@ class EnvironmentalService:
             dict: CO2 emission estimates
         """
         try:
-            # Copernicus dataset: 'cams-global-greenhouse-gas-reanalysis'
-            # Requires: CH4, CO2 concentrations
-            # Alternative: Use World Bank emissions data by country
-            # Or EDGAR (Emissions Database for Global Atmospheric Research)
+            # Dataset: cams-global-greenhouse-gas-inversion
+            # Or use population density + economic activity as proxy
             
             return {
                 "emissions_tons_per_year": 0.0,
                 "per_capita": 0.0,
                 "trend": "stable",  # increasing, stable, decreasing
-                "source": "World Bank / EDGAR (emissions data not yet integrated)",
-                "note": "Requires World Bank API or EDGAR database integration"
+                "source": "Copernicus CAMS GHG",
+                "note": "Implement CO2 emissions retrieval"
             }
             
         except Exception as e:
