@@ -332,13 +332,6 @@ if (selectorElem) selectorElem.addEventListener('change', () => {
   else if (v === 'education') renderNormalizedMain(datasetsMain.education, 'Education (school enrollment)')
 })
 
-// FAQ toggle
-document.querySelectorAll('.faq-item').forEach(item => {
-  const q = item.querySelector('.faq-question')
-  if (!q) return
-  q.addEventListener('click', () => item.classList.toggle('active'))
-})
-
 // Refresh button
 const refreshBtn = document.getElementById("refreshDataset")
 if (refreshBtn) {
@@ -363,24 +356,29 @@ if (refreshBtn) {
 }
 
 // --- FAQ desplegable ---
-const faqItems = document.querySelectorAll(".faq-item")
-faqItems.forEach((item) => {
-  const question = item.querySelector(".faq-question")
-  if (!question) return
-  question.addEventListener("click", () => {
-    faqItems.forEach((other) => {
-      if (other !== item) other.classList.remove("active")
+const faqItems = document.querySelectorAll('.faq-item')
+if (faqItems && faqItems.length > 0) {
+  faqItems.forEach((item) => {
+    const question = item.querySelector('.faq-question')
+    if (!question) return
+    question.addEventListener('click', (ev) => {
+      // prevent default/button submit behavior if any
+      if (ev && typeof ev.preventDefault === 'function') ev.preventDefault()
+      // close other items (accordion behavior)
+      faqItems.forEach((other) => {
+        if (other !== item) other.classList.remove('active')
+      })
+      item.classList.toggle('active')
     })
-    item.classList.toggle("active")
   })
-})
+}
 
 // Report form handling
 const reportForm = document.querySelector(".report-form")
 if (reportForm) {
   reportForm.addEventListener("submit", (e) => {
     e.preventDefault()
-    alert("¡Gracias! Tu reporte ha sido enviado correctamente.")
+    alert("Thanks! Your report has been submitted successfully.")
     reportForm.reset()
   })
 }
