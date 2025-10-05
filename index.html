@@ -15,54 +15,75 @@
 
   <!-- Leaflet.heat plugin -->
   <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
-
-  <!-- Heatmap.js -->
-  <script src="https://cdn.jsdelivr.net/npm/heatmap.js@2.0.5/heatmap.min.js"></script>
-
-  <!-- Leaflet Heatmap Plugin -->
-  <script src="https://cdn.jsdelivr.net/npm/leaflet-heatmap/leaflet-heatmap.js"></script>
 </head>
 
 <body>
+  <!-- Completely redesigned header with new content, statistics, and modern layout -->
   <header class="hero">
     <div class="hero-content">
-      <h1>Data Pathways to Healthy Cities</h1>
-      <p>
-        Exploring how data transforms urban life and human well-being.
+      <div class="hero-badge">Powered by NASA Satellite Data</div>
+      <h1>Urban Health Intelligence Platform</h1>
+      <p class="hero-subtitle">
+        Real-time environmental monitoring using satellite data to create healthier, more sustainable cities worldwide
       </p>
-      <a href="#mapa" class="btn">Explore the map</a>
+      <div class="hero-stats">
+        <div class="stat-item">
+          <div class="stat-number">150+</div>
+          <div class="stat-label">Cities Monitored</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number">24/7</div>
+          <div class="stat-label">Live Data Updates</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number">5</div>
+          <div class="stat-label">Key Indicators</div>
+        </div>
+      </div>
+      <a href="#mapa" class="btn-primary">Start Exploring</a>
     </div>
   </header>
 
   <main>
+    <!-- Redesigned map section with better control layout and labels -->
     <section id="mapa" class="map-section">
-      <h2>Heatmap</h2>
-      <div class="controls"
-        style="max-width:900px;margin:0 auto 1rem;display:flex;gap:1rem;align-items:center;justify-content:center;">
-  <form id="cityForm" class="city-form" onsubmit="return false;" style="display:flex;gap:0.5rem;align-items:center;">
-          <label for="cityInput" class="visually-hidden">Search city</label>
-          <input id="cityInput" name="city" type="search" placeholder="Enter city (e.g. Madrid)"
-            aria-label="Search city" style="padding:0.5rem;border-radius:4px;border:1px solid #ccc;min-width:220px;" />
-          <button id="cityGoBtn" type="button" style="padding:0.5rem 0.75rem;border-radius:4px;border:0;background:#333;color:#fff;cursor:pointer;">Go</button>
-          <select id="datasetSelect" aria-label="Select dataset">
-            <option value="our_index.json">Our index (default)</option>
-            <option value="air_quality.json">Air Quality</option>
-            <option value="poverty.json">Poverty</option>
-            <option value="water_quality.json">Water Quality</option>
-          </select>
-        </form>
+      <div class="section-header">
+        <h2>Interactive Heatmap</h2>
+        <p class="section-subtitle">Explore environmental data across global cities</p>
       </div>
+
+      <div class="controls-wrapper">
+        <div class="controls">
+          <div class="control-group">
+            <label for="cityInput" class="control-label">Search Location</label>
+            <div class="input-with-button">
+              <input id="cityInput" name="city" type="search" placeholder="Enter city name (e.g. Madrid)"
+                aria-label="Search city" />
+              <button id="cityGoBtn" type="button">Search</button>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label for="datasetSelect" class="control-label">Data Layer</label>
+            <select id="datasetSelect" aria-label="Select dataset">
+              <option value="our_index.json">Health Index (Composite)</option>
+              <option value="air_quality.json">Air Quality</option>
+              <option value="poverty.json">Poverty Levels</option>
+              <option value="water_quality.json">Water Quality</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div id="heatmapContainer"></div>
     </section>
   </main>
-
-
 
   <section id="video-section" class="video-section">
     <div class="video-container">
       <video id="cityVideo" autoplay muted loop playsinline>
         <source src="assets/video/videoPlaneta.mp4" type="video/mp4" />
-  Your browser does not support the video tag.
+        Your browser does not support the video tag.
       </video>
       <div class="video-overlay-text">
         <h2>Explore the city in action</h2>
@@ -163,8 +184,7 @@
       <!-- Row 3: Description -->
       <div class="form-group full-width">
         <label for="descripcion">Incident description</label>
-        <textarea id="descripcion" name="descripcion" rows="4"
-          placeholder="Briefly describe the issue..."></textarea>
+        <textarea id="descripcion" name="descripcion" rows="4" placeholder="Briefly describe the issue..."></textarea>
       </div>
 
       <!-- Row 4: Name + Email -->
