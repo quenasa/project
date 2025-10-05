@@ -24,11 +24,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const div = L.DomUtil.create('div', 'legend');
     div.innerHTML = `
       <b>Air Quality Index (AQI)</b><br />
-      <span style="background:#2ecc71"></span> Good (0–50)<br />
-      <span style="background:#f1c40f"></span> Moderate (51–100)<br />
-      <span style="background:#e67e22"></span> Unhealthy (101–150)<br />
-      <span style="background:#e74c3c"></span> Very Unhealthy (151–200)<br />
-      <span style="background:#800000"></span> Hazardous (&gt;200)
+      <span style="background:#440154"></span> Very low<br />
+      <span style="background:#31688e"></span> Low–moderate<br />
+      <span style="background:#35b779"></span> Moderate–high<br />
+      <span style="background:#fde725"></span> High<br />
+      <span style="background:#f0f921"></span> Very high
     `;
     L.DomEvent.disableClickPropagation(div);
     return div;
@@ -77,19 +77,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let radius, blur, minOpacity;
     if (zoom <= 5) {
-      radius = 40; blur = 50; minOpacity = 0.4;
+      radius = 30; blur = 20; minOpacity = 0.4;
     } else {
-      radius = 50; blur = 30; minOpacity = 0.5;
+      radius = 50; blur = 20; minOpacity = 0.5;
     }
 
+    // Viridis palette (perceptually-uniform) - 5 stops
     return L.heatLayer(points, {
       radius, blur, minOpacity,
       gradient: {
-        0.0: '#2ecc71',
-        0.3: '#f1c40f',
-        0.55: '#e67e22',
-        0.75: '#e74c3c',
-        0.95: '#800000'
+        1.0: '#440154', // deep purple
+        0.75: '#31688e',
+        0.5: '#35b779',
+        0.25: '#fde725',
+        0.0: '#f0f921' // bright yellow (top)
       }
     });
   }
@@ -197,6 +198,71 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   map.on('zoomend', onZoomEnd);
+
+  // --- City search / geocoding (Nominatim) ---
+  const cityForm = document.getElementById('cityForm');
+  const cityInput = document.getElementById('cityInput');
+  const cityGoBtn = document.getElementById('cityGoBtn');
+  let cityMarker = null;
+
+  async function searchCity(q) {
+    if (!q) return;
+    const params = new URLSearchParams({ q, format: 'json', addressdetails: '1', limit: '1' });
+    const url = 'https://nominatim.openstreetmap.org/search?' + params.toString();
+    console.log('Geocoding query:', q, url);
+    try {
+      cityInput.disabled = true;
+      if (cityGoBtn) cityGoBtn.disabled = true;
+      const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+      console.log('Geocode response status:', res.status);
+      if (!res.ok) throw new Error('Geocode request failed: ' + res.status);
+      const results = await res.json();
+      console.log('Geocode results:', results);
+      if (!results || results.length === 0) {
+        alert('No results found for "' + q + '"');
+        return;
+      }
+      const first = results[0];
+      const lat = Number(first.lat);
+      const lon = Number(first.lon);
+      if (Number.isNaN(lat) || Number.isNaN(lon)) {
+        alert('Received invalid coordinates for "' + q + '"');
+        return;
+      }
+      map.flyTo([lat, lon], 12, { animate: true });
+      if (cityMarker) try { map.removeLayer(cityMarker); } catch (err) { /* ignore */ }
+      cityMarker = L.marker([lat, lon]).addTo(map);
+      const displayName = first.display_name || q;
+      cityMarker.bindPopup('<strong>' + displayName + '</strong>').openPopup();
+    } catch (err) {
+      console.error('Geocoding error', err);
+      alert('Could not geocode the city. Check your network or open the browser console for details.');
+    } finally {
+      if (cityInput) cityInput.disabled = false;
+      if (cityGoBtn) cityGoBtn.disabled = false;
+    }
+  }
+
+  if (cityForm && cityInput) {
+    // ensure form won't cause navigation even if JS binding fails
+    cityForm.addEventListener('submit', (e) => { e.preventDefault(); });
+  }
+  if (cityGoBtn && cityInput) {
+    cityGoBtn.addEventListener('click', () => {
+      const q = cityInput.value && cityInput.value.trim();
+      if (!q) return;
+      searchCity(q);
+    });
+    // also allow Enter key inside the input to trigger the search
+    cityInput.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        const q = cityInput.value && cityInput.value.trim();
+        if (!q) return;
+        searchCity(q);
+      }
+    });
+  }
 
   // initial preload and render
   preloadAll().then(() => {
