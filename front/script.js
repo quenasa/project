@@ -293,3 +293,83 @@ document.querySelectorAll('.faq-item').forEach(item => {
 // Report form demo
 const reportForm = document.querySelector('.report-form')
 if (reportForm) reportForm.addEventListener('submit', (e) => { e.preventDefault(); alert('Report submitted (demo).'); reportForm.reset() })
+
+// Refresh button
+const refreshBtn = document.getElementById("refreshDataset")
+if (refreshBtn) {
+  refreshBtn.addEventListener("click", () => {
+    const sel = document.getElementById("datasetSelect")
+    const v = sel ? sel.value : "our_index.json"
+    console.log("Manual refresh requested for", v)
+  fetch("/data/" + v)
+      .then((r) => {
+        if (r.ok) return r.json()
+        throw new Error("no")
+      })
+      .then((data) => {
+        const arr = normalize(data, v)
+        datasets[v] = arr
+        renderNormalized(arr)
+      })
+      .catch((err) => {
+        console.warn("Refresh failed", err)
+      })
+  })
+}
+
+// --- FAQ desplegable ---
+const faqItems = document.querySelectorAll(".faq-item")
+faqItems.forEach((item) => {
+  const question = item.querySelector(".faq-question")
+  if (!question) return
+  question.addEventListener("click", () => {
+    faqItems.forEach((other) => {
+      if (other !== item) other.classList.remove("active")
+    })
+    item.classList.toggle("active")
+  })
+})
+
+// Report form handling
+const reportForm = document.querySelector(".report-form")
+if (reportForm) {
+  reportForm.addEventListener("submit", (e) => {
+    e.preventDefault()
+    alert("¡Gracias! Tu reporte ha sido enviado correctamente.")
+    reportForm.reset()
+  })
+}
+
+function smoothScroll(target, duration = 1500) { // 1500 ms = 1.5s
+  const start = window.scrollY;
+  const end = target.getBoundingClientRect().top + start;
+  const distance = end - start;
+  let startTime = null;
+
+  function animation(currentTime) {
+    if (!startTime) startTime = currentTime;
+    const timeElapsed = currentTime - startTime;
+    const run = easeInOutQuad(timeElapsed, start, distance, duration);
+    window.scrollTo(0, run);
+    if (timeElapsed < duration) requestAnimationFrame(animation);
+  }
+
+  // Easing para que se vea más natural
+  function easeInOutQuad(t, b, c, d) {
+    t /= d / 2;
+    if (t < 1) return (c / 2) * t * t + b;
+    t--;
+    return (-c / 2) * (t * (t - 2) - 1) + b;
+  }
+
+  requestAnimationFrame(animation);
+}
+
+// Usa este en lugar del comportamiento nativo:
+document.querySelectorAll('a[href^="#"]').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    const target = document.querySelector(link.getAttribute('href'));
+    if (target) smoothScroll(target, 2000); // puedes cambiar 2000 para más o menos tiempo
+  });
+});
