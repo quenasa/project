@@ -290,10 +290,6 @@ document.querySelectorAll('.faq-item').forEach(item => {
   q.addEventListener('click', () => item.classList.toggle('active'))
 })
 
-// Report form demo
-const reportForm = document.querySelector('.report-form')
-if (reportForm) reportForm.addEventListener('submit', (e) => { e.preventDefault(); alert('Report submitted (demo).'); reportForm.reset() })
-
 // Refresh button
 const refreshBtn = document.getElementById("refreshDataset")
 if (refreshBtn) {
