@@ -20,13 +20,10 @@ import os
 # Import configuration
 from config.settings import config
 
-# Import blueprints
+# Import blueprints (solo los que existen)
 from api.routes import main_bp
-from api.environmental_routes import environmental_bp
 from api.socioeconomic_routes import socioeconomic_bp
-from api.democratic_routes import democratic_bp
-from api.vulnerability_routes import vulnerability_bp
-from api.reports_routes import reports_bp
+from api.country_routes import country_bp
 
 
 def create_app(config_name='default'):
@@ -59,26 +56,18 @@ def create_app(config_name='default'):
     )
     
     # Apply rate limiting to blueprints
-    limiter.limit("50 per hour")(environmental_bp)
-    limiter.limit("50 per hour")(socioeconomic_bp)
-    limiter.limit("50 per hour")(democratic_bp)
-    limiter.limit("50 per hour")(vulnerability_bp)
-    limiter.limit("30 per hour")(reports_bp)  # More restrictive for writes
+    limiter.limit("100 per hour")(socioeconomic_bp)
     limiter.exempt(main_bp)  # No rate limit for main routes
+    limiter.exempt(country_bp)  # No rate limit for pre-calculated data
     
     # Apply caching to blueprints (1 hour)
-    cache.cached(timeout=3600, query_string=True)(environmental_bp)
     cache.cached(timeout=3600, query_string=True)(socioeconomic_bp)
-    cache.cached(timeout=3600, query_string=True)(democratic_bp)
-    cache.cached(timeout=3600)(vulnerability_bp)
+    # No cache for country_bp - data is already cached in SQLite
     
     # Register blueprints
     app.register_blueprint(main_bp)
-    app.register_blueprint(environmental_bp)
     app.register_blueprint(socioeconomic_bp)
-    app.register_blueprint(democratic_bp)
-    app.register_blueprint(vulnerability_bp)
-    app.register_blueprint(reports_bp)
+    app.register_blueprint(country_bp)
     
     # Error handlers
     @app.errorhandler(404)

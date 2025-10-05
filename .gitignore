@@ -56,7 +56,7 @@ htmlcov/
 Thumbs.db
 
 # Database
-*.db
+#*.db
 *.sqlite
 *.sqlite3
 
