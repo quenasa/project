@@ -22,11 +22,34 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 const legendControl2 = L.control({ position: 'bottomleft' })
 legendControl2.onAdd = () => {
   const div = L.DomUtil.create('div', 'legend')
-  div.innerHTML = '<b>Value</b>'
+  // initial contents replaced/updated later by updateLegend()
+  div.innerHTML = '<div class="legend-body"></div>'
   L.DomEvent.disableClickPropagation(div)
   return div
 }
 legendControl2.addTo(map)
+
+// Helper: build/update legend contents to explain heatmap colors and show stats
+function updateLegend(label, minMetric, maxMetric, cap) {
+  const legendDiv = document.querySelector('.legend')
+  if (!legendDiv) return
+  const body = legendDiv.querySelector('.legend-body')
+  if (!body) return
+
+  // Minimal legend: only label + swatch + min and swatch + max
+  const swatchLow = '#f0f921'
+  const swatchHigh = '#440154'
+
+  body.innerHTML = `
+    <div class="legend-row">
+      <div class="legend-title">${label}</div>
+    </div>
+    <div class="legend-row legend-minmax">
+      <div class="legend-min"><span class="legend-swatch" style="background:${swatchLow}"></span> ${Number(minMetric).toFixed(2)}</div>
+      <div class="legend-max"><span class="legend-swatch" style="background:${swatchHigh}"></span> ${Number(maxMetric).toFixed(2)}</div>
+    </div>
+  `
+}
 
 let heatLayerMain = null
 let currentNormalized = []
@@ -115,13 +138,8 @@ function renderNormalizedMain(norm, label) {
 
   const legendDiv = document.querySelector('.legend')
   if (legendDiv) {
-    legendDiv.innerHTML = `<b>${label}</b>`
-    const stats = document.createElement('div')
-    stats.className = 'legend-stats'
-    stats.style.fontSize = '12px'
-    stats.style.marginTop = '6px'
-    stats.textContent = `min: ${minMetric.toFixed(2)} • max: ${maxMetric.toFixed(2)} • cap: ${metricCap}`
-    legendDiv.appendChild(stats)
+    // Use helper to populate legend (color bar + labels + stats)
+    updateLegend(label, minMetric, maxMetric, metricCap)
   }
 }
 
@@ -135,13 +153,13 @@ map.on('zoomend', () => {
 
 // Load heatmap.json and build datasets
 let countriesIndex = {}
-let datasetsMain = { temperature: [], co2: [], poverty: [], education: [] }
+let datasetsMain = { sers: [], temperature: [], co2: [], poverty: [], education: [] }
 let countriesLayer = null
 
 function buildDatasetsMain(json) {
   const arr = Array.isArray(json.countries) ? json.countries : []
   countriesIndex = {}
-  datasetsMain = { temperature: [], co2: [], poverty: [], education: [] }
+  datasetsMain = { sers: [], temperature: [], co2: [], poverty: [], education: [] }
   // remove old countries layer if present
   if (countriesLayer) {
     try { map.removeLayer(countriesLayer) } catch (e) {}
@@ -163,6 +181,26 @@ function buildDatasetsMain(json) {
       if (v === null || v === undefined) return NaN
       const n = Number(v)
       return Number.isFinite(n) ? n : NaN
+    }
+
+    // SERS (socio-economic resilience score) - prefer `sers_index` per data file
+    if (c.socioeconomic && c.socioeconomic.sers_index) {
+      const sVal = c.socioeconomic.sers_index.value != null ? c.socioeconomic.sers_index.value : NaN
+      const s = num(sVal)
+      if (!Number.isNaN(s) && lat !== null && lng !== null) datasetsMain.sers.push({ lat, lng, metric: s })
+    } else {
+      // fallback to older possible keys (backwards compatibility)
+      if (c.socioeconomic && (c.socioeconomic.sers || c.socioeconomic.sers_score)) {
+        const sVal = c.socioeconomic.sers && c.socioeconomic.sers.value != null ? c.socioeconomic.sers.value : (c.socioeconomic.sers_score != null ? c.socioeconomic.sers_score : NaN)
+        const s = num(sVal)
+        if (!Number.isNaN(s) && lat !== null && lng !== null) datasetsMain.sers.push({ lat, lng, metric: s })
+      }
+      // also accept top-level c.sers or c.sers_score
+      if ((c.sers != null || c.sers_score != null) && !(c.socioeconomic && (c.socioeconomic.sers || c.socioeconomic.sers_score))) {
+        const sVal = c.sers != null ? c.sers : c.sers_score
+        const s = num(sVal)
+        if (!Number.isNaN(s) && lat !== null && lng !== null) datasetsMain.sers.push({ lat, lng, metric: s })
+      }
     }
 
     // temperature
@@ -201,7 +239,7 @@ function buildDatasetsMain(json) {
         const lines = []
         const nameDisplay = (c.country || c.iso3 || 'Unknown')
         lines.push(`<strong>${nameDisplay}</strong>`)
-        const t = c.environmental && c.environmental.temperature && c.environmental.temperature.value
+  const t = c.environmental && c.environmental.temperature && c.environmental.temperature.value
         if (Number.isFinite(Number(t)) && Number(t) !== 0) lines.push(`Temperature: ${Number(t).toFixed(1)} °C`)
         const co2 = c.environmental && c.environmental.co2 && c.environmental.co2.value
         if (Number.isFinite(Number(co2)) && Number(co2) !== 0) lines.push(`CO2: ${Number(co2).toFixed(1)} ppm`)
@@ -209,6 +247,14 @@ function buildDatasetsMain(json) {
         if (Number.isFinite(Number(pov)) && Number(pov) !== 0) lines.push(`Poverty: ${Number(pov).toFixed(1)} %`)
         const edu = c.socioeconomic && c.socioeconomic.school_enrollment && c.socioeconomic.school_enrollment.value
         if (Number.isFinite(Number(edu)) && Number(edu) !== 0) lines.push(`Education: ${Number(edu).toFixed(1)}`)
+  // show SERS if available (prefer `sers_index`)
+  let sersVal = null
+  if (c.socioeconomic && c.socioeconomic.sers_index && c.socioeconomic.sers_index.value != null) sersVal = c.socioeconomic.sers_index.value
+  else if (c.socioeconomic && c.socioeconomic.sers && c.socioeconomic.sers.value != null) sersVal = c.socioeconomic.sers.value
+  else if (c.socioeconomic && c.socioeconomic.sers_score != null) sersVal = c.socioeconomic.sers_score
+  else if (c.sers != null) sersVal = c.sers
+  else if (c.sers_score != null) sersVal = c.sers_score
+  if (Number.isFinite(Number(sersVal)) && Number(sersVal) !== 0) lines.push(`SERS: ${Number(sersVal).toFixed(2)}`)
         const html = lines.join('<br/>') || `<strong>${nameDisplay}</strong><br/>No data available`
         m.bindTooltip(html, { direction: 'top', offset: [0, -8], opacity: 0.95 }).openTooltip()
       })
@@ -231,10 +277,12 @@ async function loadHeatmapMain() {
     const json = await res.json()
     buildDatasetsMain(json)
     if (loaderElem) loaderElem.style.display = 'none'
-  if (datasetsMain.temperature.length > 0) renderNormalizedMain(datasetsMain.temperature, 'Temperature (°C)')
-  else if (datasetsMain.co2.length > 0) renderNormalizedMain(datasetsMain.co2, 'CO2 (ppm)')
-  else if (datasetsMain.poverty.length > 0) renderNormalizedMain(datasetsMain.poverty, 'Poverty Index (%)')
-  else if (datasetsMain.education.length > 0) renderNormalizedMain(datasetsMain.education, 'Education (school enrollment)')
+    // prefer SERS by default
+    if (datasetsMain.sers.length > 0) renderNormalizedMain(datasetsMain.sers, 'SERS (Socio-Economic Risk Score)')
+    else if (datasetsMain.temperature.length > 0) renderNormalizedMain(datasetsMain.temperature, 'Temperature (°C)')
+    else if (datasetsMain.co2.length > 0) renderNormalizedMain(datasetsMain.co2, 'CO2 (ppm)')
+    else if (datasetsMain.poverty.length > 0) renderNormalizedMain(datasetsMain.poverty, 'Poverty Index (%)')
+    else if (datasetsMain.education.length > 0) renderNormalizedMain(datasetsMain.education, 'Education (school enrollment)')
   } catch (e) {
     console.error(e)
     if (loaderElem) loaderElem.textContent = 'Failed to load data.'
@@ -277,7 +325,8 @@ if (cityInputElem) cityInputElem.addEventListener('keydown', (ev) => { if (ev.ke
 const selectorElem = document.getElementById('datasetSelect')
 if (selectorElem) selectorElem.addEventListener('change', () => {
   const v = selectorElem.value
-  if (v === 'temperature') renderNormalizedMain(datasetsMain.temperature, 'Temperature (°C)')
+  if (v === 'sers') renderNormalizedMain(datasetsMain.sers, 'SERS (Socio-Economic Risk Score)')
+  else if (v === 'temperature') renderNormalizedMain(datasetsMain.temperature, 'Temperature (°C)')
   else if (v === 'co2') renderNormalizedMain(datasetsMain.co2, 'CO2 (ppm)')
   else if (v === 'poverty') renderNormalizedMain(datasetsMain.poverty, 'Poverty Index (%)')
   else if (v === 'education') renderNormalizedMain(datasetsMain.education, 'Education (school enrollment)')
