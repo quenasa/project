@@ -403,35 +403,36 @@ if (reportForm) {
   })
 }
 
-const hero = document.querySelector(".hero")
-if (hero) {
-  hero.addEventListener("mousemove", (e) => {
-    const rect = hero.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+function smoothScroll(target, duration = 1500) { // 1500 ms = 1.5s
+  const start = window.scrollY;
+  const end = target.getBoundingClientRect().top + start;
+  const distance = end - start;
+  let startTime = null;
 
-    // Calculate percentages (0-100)
-    const xPercent = (x / rect.width) * 100
-    const yPercent = (y / rect.height) * 100
+  function animation(currentTime) {
+    if (!startTime) startTime = currentTime;
+    const timeElapsed = currentTime - startTime;
+    const run = easeInOutQuad(timeElapsed, start, distance, duration);
+    window.scrollTo(0, run);
+    if (timeElapsed < duration) requestAnimationFrame(animation);
+  }
 
-    // Create dynamic gradient based on mouse position
-    // Shift hue and position based on cursor location (subtler range)
-    // Use narrower offsets so the gradient changes more gently
-    const hue1 = 175 + (xPercent / 100) * 20 // 180-200 (teal to cyan subtle)
-    const hue2 = 195 + (yPercent / 100) * 20 // 195-215 (cyan to blue subtle)
-    const hue3 = 205 + ((xPercent + yPercent) / 200) * 20 // 205-225 (blue to purple subtle)
+  // Easing para que se vea más natural
+  function easeInOutQuad(t, b, c, d) {
+    t /= d / 2;
+    if (t < 1) return (c / 2) * t * t + b;
+    t--;
+    return (-c / 2) * (t * (t - 2) - 1) + b;
+  }
 
-    hero.style.background = `
-      radial-gradient(circle at ${xPercent}% ${yPercent}%, 
-        hsla(${hue1}, 70%, 35%, 1) 0%, 
-        hsla(${hue2}, 65%, 40%, 1) 30%, 
-        hsla(${hue3}, 60%, 30%, 1) 100%
-      )
-    `
-  })
-
-  // Reset to default gradient when mouse leaves
-  hero.addEventListener("mouseleave", () => {
-    hero.style.background = ""
-  })
+  requestAnimationFrame(animation);
 }
+
+// Usa este en lugar del comportamiento nativo:
+document.querySelectorAll('a[href^="#"]').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    const target = document.querySelector(link.getAttribute('href'));
+    if (target) smoothScroll(target, 2000); // puedes cambiar 2000 para más o menos tiempo
+  });
+});
