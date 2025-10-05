@@ -1,55 +1,41 @@
+// Clean, single-script implementation
 // @ts-nocheck
 /* global L */
-// Leaflet (L) is loaded via CDN in index.html
 
-// Ensure a loader exists
-let loader = document.querySelector(".loader")
-if (!loader) {
-  loader = document.createElement("div")
-  loader.className = "loader"
-  loader.textContent = "Loading heatmap data..."
-  document.body.appendChild(loader)
-}
-
-// Declare the L variable before using it
 const L = window.L
 
-// Initialize map
-const map = L.map("heatmapContainer").setView([40.4168, -3.7038], 6)
+// loader
+let loaderElem = document.querySelector('.loader')
+if (!loaderElem) {
+  loaderElem = document.createElement('div')
+  loaderElem.className = 'loader'
+  loaderElem.textContent = 'Loading heatmap data...'
+  document.body.appendChild(loaderElem)
+}
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+const map = L.map('heatmapContainer').setView([20, 0], 2)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 18,
-  attribution: "© OpenStreetMap contributors",
+  attribution: '© OpenStreetMap contributors',
 }).addTo(map)
 
-// Legend control
-const legendControl = L.control({ position: "bottomleft" })
-legendControl.onAdd = () => {
-  const div = L.DomUtil.create("div", "legend")
-  div.innerHTML = `
-    <b>Air Quality Index (AQI)</b><br />
-    <span style="background:#440154"></span> Very low<br />
-    <span style="background:#31688e"></span> Low–moderate<br />
-    <span style="background:#35b779"></span> Moderate–high<br />
-    <span style="background:#fde725"></span> High<br />
-    <span style="background:#f0f921"></span> Very high
-  `
+const legendControl2 = L.control({ position: 'bottomleft' })
+legendControl2.onAdd = () => {
+  const div = L.DomUtil.create('div', 'legend')
+  div.innerHTML = '<b>Value</b>'
   L.DomEvent.disableClickPropagation(div)
   return div
 }
-legendControl.addTo(map)
+legendControl2.addTo(map)
 
-// Fallback sample data (lat, lng, aqi)
-const fallback = [
-  { lat: 40.4168, lng: -3.7038, aqi: 80 }, // Madrid
-  { lat: 41.3851, lng: 2.1734, aqi: 60 }, // Barcelona
-  { lat: 37.3891, lng: -5.9845, aqi: 30 }, // Sevilla
-  { lat: 39.4699, lng: -0.3763, aqi: 50 }, // Valencia
-]
+let heatLayerMain = null
+let currentNormalized = []
+let metricCap = 100
 
-function aggregatePoints(raw, precision) {
+function aggregatePointsMain(raw, precision = 1) {
   const buckets = new Map()
   for (const p of raw) {
+    if (!p || typeof p.lat !== 'number' || typeof p.lng !== 'number') continue
     const latR = Number(p.lat.toFixed(precision))
     const lngR = Number(p.lng.toFixed(precision))
     const key = `${latR},${lngR}`
@@ -66,372 +52,244 @@ function aggregatePoints(raw, precision) {
     const lat = b.latSum / b.count
     const lng = b.lngSum / b.count
     const avgMetric = b.metricSum / b.count
-    // use dataset-specific cap to compute intensity
-    const intensity = Math.min(avgMetric / metricCap, 1)
+    const intensity = Math.max(0, Math.min(avgMetric / metricCap, 1))
     points.push([lat, lng, intensity])
   }
   return points
 }
 
-let heatLayer = null
-function createHeatForZoom(rawData, zoom) {
-  let precision
-  if (zoom <= 6) precision = 1
+function createHeatMain(rawData, zoom) {
+  let precision = 1
+  if (zoom <= 3) precision = 0
+  else if (zoom <= 6) precision = 1
   else if (zoom <= 9) precision = 2
   else precision = 3
 
-  const points = aggregatePoints(rawData, precision)
-
-  let radius, blur, minOpacity
-  if (zoom <= 5) {
-    radius = 30
-    blur = 20
-    minOpacity = 0.4
-  } else {
-    radius = 50
-    blur = 20
-    minOpacity = 0.5
-  }
-
-  // Viridis palette (perceptually-uniform) - 5 stops
+  const points = aggregatePointsMain(rawData, precision)
+  const radius = zoom <= 5 ? 25 : 40
+  const blur = 20
+  const minOpacity = 0.4
   return L.heatLayer(points, {
     radius,
     blur,
     minOpacity,
     gradient: {
-      1.0: "#440154", // deep purple
-      0.75: "#31688e",
-      0.5: "#35b779",
-      0.25: "#fde725",
-      0.0: "#f0f921", // bright yellow (top)
+      0.0: '#f0f921',
+      0.25: '#fde725',
+      0.5: '#35b779',
+      0.75: '#31688e',
+      1.0: '#440154',
     },
   })
 }
 
-// Preload datasets so switching is instant. Store normalized arrays under datasets[file]
-const datasetFiles = ["our_index.json", "air_quality.json", "poverty.json", "water_quality.json"]
-const datasets = {} // filename -> normalized array
-
-async function fetchAndNormalize(file) {
-  try {
-  const res = await fetch("/data/" + file)
-    if (!res.ok) throw new Error("no data")
-    const data = await res.json()
-    return normalize(data, file)
-  } catch (e) {
-    console.warn("Failed to load", file, e)
-    // return a normalized fallback using fallback raw and mapping for air_quality
-    return normalize(fallback, "air_quality.json")
+function clearHeatMain() {
+  if (heatLayerMain) {
+    try { map.removeLayer(heatLayerMain) } catch (e) {}
+    heatLayerMain = null
   }
 }
 
-// mapping function: returns array of {lat,lng,metric}
-function normalize(data, file) {
-  if (!Array.isArray(data)) return []
-  if (file === "air_quality.json") return data.map((d) => ({ lat: d.lat, lng: d.lng, metric: Number(d.aqi ?? 0) }))
-  if (file === "poverty.json")
-    return data.map((d) => ({ lat: d.lat, lng: d.lng, metric: Number((d.value ?? 0) * 100) })) // fraction -> percent
-  if (file === "water_quality.json") return data.map((d) => ({ lat: d.lat, lng: d.lng, metric: Number(d.wqi ?? 0) }))
-  // our_index.json assumed 0..1 -> scale to 0..100 for visualization
-  return data.map((d) => ({ lat: d.lat, lng: d.lng, metric: Number((d.index ?? 0) * 100) }))
-}
-
-// load all datasets once
-async function preloadAll() {
-  const promises = datasetFiles.map((f) =>
-    fetchAndNormalize(f).then((arr) => {
-      datasets[f] = arr
-    }),
-  )
-  await Promise.all(promises)
-}
-
-// Current normalized data reference
-let currentNormalized = null
-let zoomTimeout = null
-let metricCap = 100
-
-function renderNormalized(norm) {
-  if (!norm || norm.length === 0) {
-    console.warn("No data to render")
+function renderNormalizedMain(norm, label) {
+  if (!Array.isArray(norm) || norm.length === 0) {
+    console.warn('No data to render for', label)
+    clearHeatMain()
     return
   }
-  // Update legend title based on selected dataset
-  const sel = document.getElementById("datasetSelect")
-  const selVal = sel ? sel.value : "our_index.json"
-  const legendDiv = document.querySelector(".legend")
-  if (legendDiv) {
-    if (selVal === "air_quality.json") legendDiv.querySelector("b").textContent = "Air Quality Index (AQI)"
-    else if (selVal === "poverty.json") legendDiv.querySelector("b").textContent = "Poverty (%)"
-    else if (selVal === "water_quality.json") legendDiv.querySelector("b").textContent = "Water Quality Index"
-    else legendDiv.querySelector("b").textContent = "Our index"
+  const metrics = norm.map(d => Number(d.metric || 0)).filter(n => Number.isFinite(n))
+  if (metrics.length === 0) {
+    console.warn('No numeric metrics to render for', label)
+    clearHeatMain()
+    return
   }
-
-  console.log("Rendering dataset:", selVal, "points:", norm.length)
-  // compute min/max of metric for this dataset
-  const metrics = norm.map((d) => Number(d.metric || 0))
   const minMetric = Math.min(...metrics)
   const maxMetric = Math.max(...metrics)
-  // dynamic scaling: map min->0 and max->cap (or 100) to full intensity range
-  const cap = selVal === "air_quality.json" ? 200 : 100
-  metricCap = cap
-  const scaleMin = minMetric
-  const scaleMax = Math.max(maxMetric, 1)
+  metricCap = Math.max(1, maxMetric)
 
-  // apply dynamic normalization to create a metric field normalized to 0..cap
-  const dyn = norm.map((d) => ({
-    lat: d.lat,
-    lng: d.lng,
-    metric: ((Number(d.metric || 0) - scaleMin) / (scaleMax - scaleMin)) * cap,
-  }))
-  currentNormalized = dyn
-  const newHeat = createHeatForZoom(currentNormalized, map.getZoom())
-  if (heatLayer) {
-    try {
-      map.removeLayer(heatLayer)
-    } catch (e) {
-      /* ignore */
-    }
-  }
-  // ensure map has correct size before adding layer
-  try {
-    map.invalidateSize()
-  } catch (e) {
-    /* ignore */
-  }
-  heatLayer = newHeat.addTo(map)
+  currentNormalized = norm.map(d => ({ lat: d.lat, lng: d.lng, metric: Number(d.metric || 0) }))
 
-  // Update legend with stats
+  const newHeat = createHeatMain(currentNormalized, map.getZoom())
+  clearHeatMain()
+  try { map.invalidateSize() } catch (e) {}
+  heatLayerMain = newHeat.addTo(map)
+
+  const legendDiv = document.querySelector('.legend')
   if (legendDiv) {
-    const stats = document.createElement("div")
-    stats.style.fontSize = "12px"
-    stats.style.marginTop = "6px"
-    stats.textContent = `min: ${minMetric.toFixed(1)} • max: ${maxMetric.toFixed(1)} • cap: ${metricCap}`
-    // remove old stats if present
-    const old = legendDiv.querySelector(".legend-stats")
-    if (old) old.remove()
-    stats.className = "legend-stats"
+    legendDiv.innerHTML = `<b>${label}</b>`
+    const stats = document.createElement('div')
+    stats.className = 'legend-stats'
+    stats.style.fontSize = '12px'
+    stats.style.marginTop = '6px'
+    stats.textContent = `min: ${minMetric.toFixed(2)} • max: ${maxMetric.toFixed(2)} • cap: ${metricCap}`
     legendDiv.appendChild(stats)
   }
 }
 
-// Single zoom handler uses currentNormalized
-function onZoomEnd() {
-  if (zoomTimeout) clearTimeout(zoomTimeout)
-  zoomTimeout = setTimeout(() => {
-    if (!currentNormalized) return
-    const z = map.getZoom()
-    const h = createHeatForZoom(currentNormalized, z)
-    if (heatLayer) map.removeLayer(heatLayer)
-    heatLayer = h.addTo(map)
-  }, 200)
-}
+map.on('zoomend', () => {
+  if (!currentNormalized || currentNormalized.length === 0) return
+  const z = map.getZoom()
+  const h = createHeatMain(currentNormalized, z)
+  clearHeatMain()
+  heatLayerMain = h.addTo(map)
+})
 
-map.on("zoomend", onZoomEnd)
+// Load heatmap.json and build datasets
+let countriesIndex = {}
+let datasetsMain = { temperature: [], co2: [], poverty: [], education: [] }
+let countriesLayer = null
 
-// --- City search / geocoding (Nominatim) ---
-const cityForm = document.getElementById("cityForm")
-const cityInput = document.getElementById("cityInput")
-const cityGoBtn = document.getElementById("cityGoBtn")
-let cityMarker = null
+function buildDatasetsMain(json) {
+  const arr = Array.isArray(json.countries) ? json.countries : []
+  countriesIndex = {}
+  datasetsMain = { temperature: [], co2: [], poverty: [], education: [] }
+  // remove old countries layer if present
+  if (countriesLayer) {
+    try { map.removeLayer(countriesLayer) } catch (e) {}
+    countriesLayer = null
+  }
+  const markers = []
+  for (const c of arr) {
+    const name = (c.country || '').trim()
+    const iso3 = (c.iso3 || '').trim()
+    if (!name && !iso3) continue
+    const lat = Array.isArray(c.coordinates) && typeof c.coordinates[0] === 'number' ? c.coordinates[0] : null
+    const lng = Array.isArray(c.coordinates) && typeof c.coordinates[1] === 'number' ? c.coordinates[1] : null
+    // store both name and iso3 indexed lowercase for flexible search
+    if (name) countriesIndex[name.toLowerCase()] = c
+    if (iso3) countriesIndex[iso3.toLowerCase()] = c
 
-async function searchCity(q) {
-  if (!q) return
-  const params = new URLSearchParams({ q, format: "json", addressdetails: "1", limit: "1" })
-  const url = "https://nominatim.openstreetmap.org/search?" + params.toString()
-  console.log("Geocoding query:", q, url)
-  try {
-    cityInput.disabled = true
-    if (cityGoBtn) cityGoBtn.disabled = true
-    const res = await fetch(url, { headers: { "Accept-Language": "en" } })
-    console.log("Geocode response status:", res.status)
-    if (!res.ok) throw new Error("Geocode request failed: " + res.status)
-    const results = await res.json()
-    console.log("Geocode results:", results)
-    if (!results || results.length === 0) {
-      alert('No results found for "' + q + '"')
-      return
+    // helper to coerce numbers safely
+    const num = (v) => {
+      if (v === null || v === undefined) return NaN
+      const n = Number(v)
+      return Number.isFinite(n) ? n : NaN
     }
-    const first = results[0]
-    const lat = Number(first.lat)
-    const lon = Number(first.lon)
-    if (Number.isNaN(lat) || Number.isNaN(lon)) {
-      alert('Received invalid coordinates for "' + q + '"')
-      return
+
+    // temperature
+    if (c.environmental && c.environmental.temperature) {
+      const t = num(c.environmental.temperature.value)
+      if (!Number.isNaN(t) && lat !== null && lng !== null) datasetsMain.temperature.push({ lat, lng, metric: t })
     }
-    map.flyTo([lat, lon], 12, { animate: true })
-    if (cityMarker)
-      try {
-        map.removeLayer(cityMarker)
-      } catch (err) {
-        /* ignore */
-      }
-    cityMarker = L.marker([lat, lon]).addTo(map)
-    const displayName = first.display_name || q
-    cityMarker.bindPopup("<strong>" + displayName + "</strong>").openPopup()
-  } catch (err) {
-    console.error("Geocoding error", err)
-    alert("Could not geocode the city. Check your network or open the browser console for details.")
-  } finally {
-    if (cityInput) cityInput.disabled = false
-    if (cityGoBtn) cityGoBtn.disabled = false
+    // co2
+    if (c.environmental && c.environmental.co2) {
+      const x = num(c.environmental.co2.value)
+      if (!Number.isNaN(x) && lat !== null && lng !== null) datasetsMain.co2.push({ lat, lng, metric: x })
+    }
+    // poverty (socioeconomic.poverty_index.value)
+    if (c.socioeconomic && c.socioeconomic.poverty_index) {
+      const p = num(c.socioeconomic.poverty_index.value)
+      if (!Number.isNaN(p) && lat !== null && lng !== null) datasetsMain.poverty.push({ lat, lng, metric: p })
+    }
+    // education (school_enrollment)
+    if (c.socioeconomic && c.socioeconomic.school_enrollment) {
+      const e = num(c.socioeconomic.school_enrollment.value)
+      if (!Number.isNaN(e) && lat !== null && lng !== null) datasetsMain.education.push({ lat, lng, metric: e })
+    }
+
+    // create an invisible interactive marker for hover tooltip (use country-level data)
+    if (lat !== null && lng !== null) {
+      const m = L.circleMarker([lat, lng], {
+        radius: 6,
+        color: '#000',
+        weight: 0,
+        opacity: 0,
+        fillOpacity: 0,
+        interactive: true,
+      })
+      // prepare tooltip content dynamically on hover
+      m.on('mouseover', (ev) => {
+        const lines = []
+        const nameDisplay = (c.country || c.iso3 || 'Unknown')
+        lines.push(`<strong>${nameDisplay}</strong>`)
+        const t = c.environmental && c.environmental.temperature && c.environmental.temperature.value
+        if (Number.isFinite(Number(t)) && Number(t) !== 0) lines.push(`Temperature: ${Number(t).toFixed(1)} °C`)
+        const co2 = c.environmental && c.environmental.co2 && c.environmental.co2.value
+        if (Number.isFinite(Number(co2)) && Number(co2) !== 0) lines.push(`CO2: ${Number(co2).toFixed(1)} ppm`)
+        const pov = c.socioeconomic && c.socioeconomic.poverty_index && c.socioeconomic.poverty_index.value
+        if (Number.isFinite(Number(pov)) && Number(pov) !== 0) lines.push(`Poverty: ${Number(pov).toFixed(1)} %`)
+        const edu = c.socioeconomic && c.socioeconomic.school_enrollment && c.socioeconomic.school_enrollment.value
+        if (Number.isFinite(Number(edu)) && Number(edu) !== 0) lines.push(`Education: ${Number(edu).toFixed(1)}`)
+        const html = lines.join('<br/>') || `<strong>${nameDisplay}</strong><br/>No data available`
+        m.bindTooltip(html, { direction: 'top', offset: [0, -8], opacity: 0.95 }).openTooltip()
+      })
+      m.on('mouseout', () => {
+        try { m.closeTooltip() } catch (e) {}
+      })
+      markers.push(m)
+    }
+  }
+  if (markers.length > 0) {
+    countriesLayer = L.layerGroup(markers)
+    countriesLayer.addTo(map)
   }
 }
 
-if (cityForm && cityInput) {
-  // ensure form won't cause navigation even if JS binding fails
-  cityForm.addEventListener("submit", (e) => {
-    e.preventDefault()
-  })
-}
-if (cityGoBtn && cityInput) {
-  cityGoBtn.addEventListener("click", () => {
-    const q = cityInput.value && cityInput.value.trim()
-    if (!q) return
-    searchCity(q)
-  })
-  // also allow Enter key inside the input to trigger the search
-  cityInput.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter") {
-      ev.preventDefault()
-      const q = cityInput.value && cityInput.value.trim()
-      if (!q) return
-      searchCity(q)
-    }
-  })
+async function loadHeatmapMain() {
+  try {
+    const res = await fetch('/data/world_heatmap.json')
+    if (!res.ok) throw new Error('Failed to load heatmap.json: ' + res.status)
+    const json = await res.json()
+    buildDatasetsMain(json)
+    if (loaderElem) loaderElem.style.display = 'none'
+  if (datasetsMain.temperature.length > 0) renderNormalizedMain(datasetsMain.temperature, 'Temperature (°C)')
+  else if (datasetsMain.co2.length > 0) renderNormalizedMain(datasetsMain.co2, 'CO2 (ppm)')
+  else if (datasetsMain.poverty.length > 0) renderNormalizedMain(datasetsMain.poverty, 'Poverty Index (%)')
+  else if (datasetsMain.education.length > 0) renderNormalizedMain(datasetsMain.education, 'Education (school enrollment)')
+  } catch (e) {
+    console.error(e)
+    if (loaderElem) loaderElem.textContent = 'Failed to load data.'
+  }
 }
 
-// initial preload and render
-preloadAll().then(() => {
-  // hide loader
-  if (loader) loader.style.display = "none"
-  console.log("Datasets preloaded:", Object.keys(datasets))
-  const sel = document.getElementById("datasetSelect")
-  const start = sel ? sel.value : "our_index.json"
-  renderNormalized(datasets[start] || [])
+loadHeatmapMain()
+
+// Country-only search
+const cityInputElem = document.getElementById('cityInput')
+const cityGoBtnElem = document.getElementById('cityGoBtn')
+let countryMarker = null
+
+function findCountryByNameMain(q) {
+  if (!q) return null
+  const name = q.trim().toLowerCase()
+  if (countriesIndex[name]) return countriesIndex[name]
+  for (const k of Object.keys(countriesIndex)) {
+    if (k.includes(name)) return countriesIndex[k]
+  }
+  return null
+}
+
+function searchCountryMain(q) {
+  if (!q) return
+  const c = findCountryByNameMain(q)
+  if (!c) { alert('Country not found in data: ' + q); return }
+  const lat = Array.isArray(c.coordinates) ? c.coordinates[0] : null
+  const lng = Array.isArray(c.coordinates) ? c.coordinates[1] : null
+  if (typeof lat !== 'number' || typeof lng !== 'number') { alert('Country coordinates not available for ' + c.country); return }
+  map.flyTo([lat, lng], 5, { animate: true })
+  if (countryMarker) try { map.removeLayer(countryMarker) } catch (e) {}
+  countryMarker = L.marker([lat, lng]).addTo(map)
+  countryMarker.bindPopup(`<strong>${c.country}</strong>`).openPopup()
+}
+
+if (cityGoBtnElem && cityInputElem) cityGoBtnElem.addEventListener('click', () => searchCountryMain(cityInputElem.value))
+if (cityInputElem) cityInputElem.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); searchCountryMain(cityInputElem.value) } })
+
+const selectorElem = document.getElementById('datasetSelect')
+if (selectorElem) selectorElem.addEventListener('change', () => {
+  const v = selectorElem.value
+  if (v === 'temperature') renderNormalizedMain(datasetsMain.temperature, 'Temperature (°C)')
+  else if (v === 'co2') renderNormalizedMain(datasetsMain.co2, 'CO2 (ppm)')
+  else if (v === 'poverty') renderNormalizedMain(datasetsMain.poverty, 'Poverty Index (%)')
+  else if (v === 'education') renderNormalizedMain(datasetsMain.education, 'Education (school enrollment)')
 })
 
-// Re-load when dataset selection changes (instant because data is preloaded)
-const selector = document.getElementById("datasetSelect")
-if (selector) {
-  selector.addEventListener("change", () => {
-    // show loader briefly
-    if (loader) loader.style.display = "block"
-    const v = selector.value
-    console.log("Dataset switched to", v)
-    // if dataset already loaded use it, otherwise fetch and normalize
-    if (datasets[v]) {
-      // small timeout to allow loader to be visible
-      setTimeout(() => {
-        if (loader) loader.style.display = "none"
-        renderNormalized(datasets[v])
-      }, 120)
-    } else {
-      fetchAndNormalize(v).then((arr) => {
-        datasets[v] = arr
-        if (loader) loader.style.display = "none"
-        renderNormalized(arr)
-      })
-    }
-  })
-}
-
-// Optional: poll current dataset for live updates every 15s
-const pollInterval = 5000 // ms (faster for testing)
-setInterval(() => {
-  const sel = document.getElementById("datasetSelect")
-  const v = sel ? sel.value : "our_index.json"
-  fetch("/data/" + v)
-    .then((r) => {
-      if (r.ok) return r.json()
-      throw new Error("no")
-    })
-    .then((data) => {
-      const arr = normalize(data, v)
-      datasets[v] = arr
-      // if currently displayed dataset, re-render with fresh values
-      if (currentNormalized && sel && sel.value === v) renderNormalized(arr)
-    })
-    .catch(() => {
-      /* ignore polling errors */
-    })
-}, pollInterval)
-
-// Refresh button
-const refreshBtn = document.getElementById("refreshDataset")
-if (refreshBtn) {
-  refreshBtn.addEventListener("click", () => {
-    const sel = document.getElementById("datasetSelect")
-    const v = sel ? sel.value : "our_index.json"
-    console.log("Manual refresh requested for", v)
-  fetch("/data/" + v)
-      .then((r) => {
-        if (r.ok) return r.json()
-        throw new Error("no")
-      })
-      .then((data) => {
-        const arr = normalize(data, v)
-        datasets[v] = arr
-        renderNormalized(arr)
-      })
-      .catch((err) => {
-        console.warn("Refresh failed", err)
-      })
-  })
-}
-
-// --- FAQ desplegable ---
-const faqItems = document.querySelectorAll(".faq-item")
-faqItems.forEach((item) => {
-  const question = item.querySelector(".faq-question")
-  if (!question) return
-  question.addEventListener("click", () => {
-    faqItems.forEach((other) => {
-      if (other !== item) other.classList.remove("active")
-    })
-    item.classList.toggle("active")
-  })
+// FAQ toggle
+document.querySelectorAll('.faq-item').forEach(item => {
+  const q = item.querySelector('.faq-question')
+  if (!q) return
+  q.addEventListener('click', () => item.classList.toggle('active'))
 })
 
-// Report form handling
-const reportForm = document.querySelector(".report-form")
-if (reportForm) {
-  reportForm.addEventListener("submit", (e) => {
-    e.preventDefault()
-    alert("¡Gracias! Tu reporte ha sido enviado correctamente.")
-    reportForm.reset()
-  })
-}
-
-const hero = document.querySelector(".hero")
-if (hero) {
-  hero.addEventListener("mousemove", (e) => {
-    const rect = hero.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-
-    // Calculate percentages (0-100)
-    const xPercent = (x / rect.width) * 100
-    const yPercent = (y / rect.height) * 100
-
-    // Create dynamic gradient based on mouse position
-    // Shift hue and position based on cursor location (subtler range)
-    // Use narrower offsets so the gradient changes more gently
-    const hue1 = 175 + (xPercent / 100) * 20 // 180-200 (teal to cyan subtle)
-    const hue2 = 195 + (yPercent / 100) * 20 // 195-215 (cyan to blue subtle)
-    const hue3 = 205 + ((xPercent + yPercent) / 200) * 20 // 205-225 (blue to purple subtle)
-
-    hero.style.background = `
-      radial-gradient(circle at ${xPercent}% ${yPercent}%, 
-        hsla(${hue1}, 70%, 35%, 1) 0%, 
-        hsla(${hue2}, 65%, 40%, 1) 30%, 
-        hsla(${hue3}, 60%, 30%, 1) 100%
-      )
-    `
-  })
-
-  // Reset to default gradient when mouse leaves
-  hero.addEventListener("mouseleave", () => {
-    hero.style.background = ""
-  })
-}
+// Report form demo
+const reportForm = document.querySelector('.report-form')
+if (reportForm) reportForm.addEventListener('submit', (e) => { e.preventDefault(); alert('Report submitted (demo).'); reportForm.reset() })
