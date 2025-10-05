@@ -278,7 +278,7 @@ async function loadHeatmapMain() {
     buildDatasetsMain(json)
     if (loaderElem) loaderElem.style.display = 'none'
     // prefer SERS by default
-    if (datasetsMain.sers.length > 0) renderNormalizedMain(datasetsMain.sers, 'SERS (Socio-Economic Risk Score)')
+    if (datasetsMain.sers.length > 0) renderNormalizedMain(datasetsMain.sers, 'SERS (Socio-Environmental Risk Score)')
     else if (datasetsMain.temperature.length > 0) renderNormalizedMain(datasetsMain.temperature, 'Temperature (°C)')
     else if (datasetsMain.co2.length > 0) renderNormalizedMain(datasetsMain.co2, 'CO2 (ppm)')
     else if (datasetsMain.poverty.length > 0) renderNormalizedMain(datasetsMain.poverty, 'Poverty Index (%)')
@@ -325,7 +325,7 @@ if (cityInputElem) cityInputElem.addEventListener('keydown', (ev) => { if (ev.ke
 const selectorElem = document.getElementById('datasetSelect')
 if (selectorElem) selectorElem.addEventListener('change', () => {
   const v = selectorElem.value
-  if (v === 'sers') renderNormalizedMain(datasetsMain.sers, 'SERS (Socio-Economic Risk Score)')
+  if (v === 'sers') renderNormalizedMain(datasetsMain.sers, 'SERS (Socio-Environmental Risk Score)')
   else if (v === 'temperature') renderNormalizedMain(datasetsMain.temperature, 'Temperature (°C)')
   else if (v === 'co2') renderNormalizedMain(datasetsMain.co2, 'CO2 (ppm)')
   else if (v === 'poverty') renderNormalizedMain(datasetsMain.poverty, 'Poverty Index (%)')
